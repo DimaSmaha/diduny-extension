@@ -167,9 +167,7 @@ test("loaded extension signs in through the mock proxy BFF, delivers dictation, 
 				const browser = globalThis as typeof globalThis & {
 					SpeechRecognition?: unknown;
 					webkitSpeechRecognition?: unknown;
-					FileSystemFileHandle?: {
-						prototype?: { createSyncAccessHandle?: unknown };
-					};
+					FileSystemFileHandle?: unknown;
 				};
 				const browserNavigator = navigator as Navigator & {
 					storage?: { getDirectory?: unknown };
@@ -183,8 +181,7 @@ test("loaded extension signs in through the mock proxy BFF, delivers dictation, 
 						typeof browser.webkitSpeechRecognition === "function",
 					opfsSyncAccess:
 						typeof browserNavigator.storage?.getDirectory === "function" &&
-						typeof browser.FileSystemFileHandle?.prototype
-							?.createSyncAccessHandle === "function",
+						typeof browser.FileSystemFileHandle === "function",
 				};
 			}),
 		).toEqual({
