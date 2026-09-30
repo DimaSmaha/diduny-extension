@@ -1031,8 +1031,9 @@ export function App() {
 			<main className="shell auth">
 				<AppBar />
 				<p>{t("auth.description")}</p>
+				{/* Keys stop React reusing the "Use another email" button as the email form submit mid-click, which submitted an empty address. */}
 				{authState === "otp-sent" ? (
-					<form onSubmit={verifyOtp}>
+					<form key="otp" onSubmit={verifyOtp}>
 						<label htmlFor="otp">{t("auth.oneTimeCode")}</label>
 						<input
 							autoComplete="one-time-code"
@@ -1054,7 +1055,7 @@ export function App() {
 					</form>
 				) : (
 					// noValidate: the browser's type=email rule refuses international addresses; isValidEmail decides.
-					<form noValidate onSubmit={sendOtp}>
+					<form key="email" noValidate onSubmit={sendOtp}>
 						<label htmlFor="email">{t("auth.email")}</label>
 						<input
 							aria-describedby={emailError ? "email-error" : undefined}
