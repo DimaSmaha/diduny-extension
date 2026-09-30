@@ -83,6 +83,17 @@ test("all web views pass axe and remain usable without horizontal scrolling at 2
 		await page.getByRole("button", { name: "Settings" }).click();
 		await expectNoAxeViolations(page);
 
+		await page.emulateMedia({ colorScheme: "dark" });
+		await expectNoAxeViolations(page);
+		await page.getByRole("button", { name: "Library" }).click();
+		await expectNoAxeViolations(page);
+		await page.getByRole("button", { name: "Dictation" }).click();
+		await expectNoAxeViolations(page);
+		await page.keyboard.press("Alt+Shift+P");
+		await expectNoAxeViolations(page);
+		await page.keyboard.press("Escape");
+		await page.getByRole("button", { name: "Settings" }).click();
+
 		await page.evaluate(() => {
 			document.documentElement.style.zoom = "2";
 		});

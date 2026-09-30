@@ -36,6 +36,14 @@ export function errorFromResponse(status: number, body: unknown) {
 	return new DidunyError("request_rejected", { body, status });
 }
 
+export function isInvalidEmailError(error: unknown) {
+	return (
+		isDidunyError(error) &&
+		error.details.status === 400 &&
+		errorCode(error.details.body) === "invalid_email"
+	);
+}
+
 export function localProcessUnavailable(error: unknown) {
 	return isDidunyError(error)
 		? error

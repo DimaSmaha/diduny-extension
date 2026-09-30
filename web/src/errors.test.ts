@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 import { DidunyError } from "../../src/core/errors";
-import { errorFromResponse, userErrorMessage } from "./errors";
+import {
+	errorFromResponse,
+	isInvalidEmailError,
+	userErrorMessage,
+} from "./errors";
 import { createI18n } from "./i18n";
 
 test("maps BFF quota, authentication, and upstream failures to distinct user actions", () => {
@@ -50,4 +54,19 @@ test("keeps the upstream error body on typed request failures", () => {
 		code: "request_rejected",
 		details: { body, status: 422 },
 	});
+});
+
+test("recognises a BFF invalid_email rejection only for a 400", () => {
+	expect(
+		isInvalidEmailError(errorFromResponse(400, { error: "invalid_email" })),
+	).toBeTrue();
+	expect(
+		isInvalidEmailError(errorFromResponse(400, { error: "invalid_otp" })),
+	).toBeFalse();
+	expect(
+		isInvalidEmailError(
+			errorFromResponse(502, { error: "upstream_auth_unavailable" }),
+		),
+	).toBeFalse();
+	expect(isInvalidEmailError(new Error("invalid_email"))).toBeFalse();
 });

@@ -22,7 +22,11 @@ import type {
 } from "./src/core/ports";
 import type { Settings } from "./src/core/settings";
 import { isReservedShortcut, normalizeShortcut } from "./src/core/shortcuts";
-import { type BffAuthGateway, ProxyOtpGateway } from "./src/server/auth";
+import {
+	type BffAuthGateway,
+	ProxyOtpGateway,
+	UpstreamAuthError,
+} from "./src/server/auth";
 import type {
 	LibraryExportEntry,
 	LibraryStorageStats,
@@ -850,7 +854,13 @@ export async function buildServer({
 		try {
 			await authGateway.sendOtp(email);
 			return reply.code(204).send();
-		} catch {
+		} catch (error) {
+			// The sign-in service may be stricter than RFC 5322; report that as a bad address, not an outage.
+			if (
+				error instanceof UpstreamAuthError &&
+				(error.status === 400 || error.status === 422)
+			)
+				return reply.code(400).send({ error: "invalid_email" });
 			return reply.code(502).send({ error: "upstream_auth_unavailable" });
 		}
 	});

@@ -1,34 +1,33 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { RetentionPolicy } from "../../src/core/ports";
+import { AppBar } from "./ThemeSwitcher";
 
-type OnboardingStep = "delivery" | "microphone" | "provider";
 type MicrophoneState = "denied" | "granted" | "idle" | "unsupported";
 
 export const onboardingCompletedStorageKey = "diduny.onboarding.completed";
 export const pendingRetentionStorageKey = "diduny.onboarding.retention";
 
-export function Onboarding({
-	asDialog = false,
-	initialStep = "microphone",
-	onClose,
-	onComplete,
+function DeliveryExplanation() {
+	const { t } = useTranslation();
+	return (
+		<>
+			<p>{t("onboarding.delivery.body")}</p>
+			<p>{t("onboarding.delivery.extension")}</p>
+			<p>{t("onboarding.delivery.clipboardNote")}</p>
+		</>
+	);
+}
+
+/** First-visit page: explains delivery and the engine, then hands off to email sign-in. */
+export function StartPage({
+	onContinue,
 }: {
-	asDialog?: boolean;
-	initialStep?: OnboardingStep;
-	onClose?(): void;
-	onComplete(retention: RetentionPolicy): void;
+	onContinue(retention: RetentionPolicy): void;
 }) {
 	const { t } = useTranslation();
 	const [microphone, setMicrophone] = useState<MicrophoneState>("idle");
 	const [retention, setRetention] = useState<RetentionPolicy>("forever");
-	const [step, setStep] = useState<OnboardingStep>(initialStep);
-	const Container = asDialog ? "section" : "main";
-	const title = useRef<HTMLHeadingElement>(null);
-
-	useEffect(() => {
-		if (asDialog) title.current?.focus();
-	}, [asDialog]);
 
 	async function requestMicrophone() {
 		if (!navigator.mediaDevices?.getUserMedia) {
@@ -45,31 +44,43 @@ export function Onboarding({
 	}
 
 	return (
-		<Container
-			aria-labelledby="onboarding-title"
-			aria-modal={asDialog || undefined}
-			className={
-				asDialog ? "onboarding onboarding-dialog" : "shell auth onboarding"
-			}
-			role={asDialog ? "dialog" : undefined}
-		>
-			<h1
-				id="onboarding-title"
-				ref={title}
-				tabIndex={asDialog ? -1 : undefined}
-			>
-				{t("app.title")}
-			</h1>
-			{onClose ? (
-				<button onClick={onClose} type="button">
-					{t("onboarding.close")}
-				</button>
-			) : null}
-			{step === "microphone" ? (
-				<>
-					<h2>{t("onboarding.microphone.title")}</h2>
-					<p>{t("onboarding.microphone.body")}</p>
-					<button onClick={() => void requestMicrophone()} type="button">
+		<main className="shell start">
+			<AppBar />
+			<p className="lead">{t("onboarding.intro")}</p>
+			<section aria-labelledby="delivery-title" className="card">
+				<h2 id="delivery-title">{t("onboarding.delivery.title")}</h2>
+				<DeliveryExplanation />
+			</section>
+			<section aria-labelledby="provider-title" className="card">
+				<h2 id="provider-title">{t("onboarding.provider.title")}</h2>
+				<p>{t("onboarding.provider.cloud")}</p>
+				<p>{t("onboarding.provider.noSubstitution")}</p>
+				<label className="checkbox" htmlFor="onboarding-never-save">
+					<input
+						checked={retention === "never"}
+						id="onboarding-never-save"
+						onChange={(event) =>
+							setRetention(event.target.checked ? "never" : "forever")
+						}
+						type="checkbox"
+					/>
+					{t("onboarding.retention.neverChoice")}
+				</label>
+				{retention === "never" ? (
+					<p className="note">{t("onboarding.retention.neverNote")}</p>
+				) : null}
+			</section>
+			<section aria-labelledby="microphone-title" className="card">
+				<h2 id="microphone-title">{t("onboarding.microphone.title")}</h2>
+				<p>{t("onboarding.microphone.body")}</p>
+				<p className="note">{t("onboarding.microphone.optional")}</p>
+				<div className="card-actions">
+					<button
+						className="secondary"
+						disabled={microphone === "granted"}
+						onClick={() => void requestMicrophone()}
+						type="button"
+					>
 						{t("onboarding.microphone.allow")}
 					</button>
 					<p aria-live="polite" className="status">
@@ -81,50 +92,39 @@ export function Onboarding({
 									? t("onboarding.microphone.unsupported")
 									: ""}
 					</p>
-					<button
-						disabled={microphone !== "granted"}
-						onClick={() => setStep("delivery")}
-						type="button"
-					>
-						{t("onboarding.continue")}
-					</button>
-				</>
-			) : null}
-			{step === "delivery" ? (
-				<>
-					<h2>{t("onboarding.delivery.title")}</h2>
-					<p>{t("onboarding.delivery.body")}</p>
-					<p>{t("onboarding.delivery.extension")}</p>
-					<p>{t("onboarding.delivery.clipboardNote")}</p>
-					<button onClick={() => setStep("provider")} type="button">
-						{t("onboarding.continue")}
-					</button>
-				</>
-			) : null}
-			{step === "provider" ? (
-				<>
-					<h2>{t("onboarding.provider.title")}</h2>
-					<p>{t("onboarding.provider.cloud")}</p>
-					<p>{t("onboarding.provider.noSubstitution")}</p>
-					<label className="checkbox" htmlFor="onboarding-never-save">
-						<input
-							checked={retention === "never"}
-							id="onboarding-never-save"
-							onChange={(event) =>
-								setRetention(event.target.checked ? "never" : "forever")
-							}
-							type="checkbox"
-						/>
-						{t("onboarding.retention.neverChoice")}
-					</label>
-					{retention === "never" ? (
-						<p>{t("onboarding.retention.neverNote")}</p>
-					) : null}
-					<button onClick={() => onComplete(retention)} type="button">
-						{t("onboarding.continueToSignIn")}
-					</button>
-				</>
-			) : null}
-		</Container>
+				</div>
+			</section>
+			<button
+				className="primary"
+				onClick={() => onContinue(retention)}
+				type="button"
+			>
+				{t("onboarding.continueToSignIn")}
+			</button>
+		</main>
+	);
+}
+
+/** Signed-in, information-only view behind the "About delivery" header button. */
+export function AboutDelivery({ onBack }: { onBack(): void }) {
+	const { t } = useTranslation();
+	const title = useRef<HTMLHeadingElement>(null);
+
+	useEffect(() => {
+		title.current?.focus();
+	}, []);
+
+	return (
+		<section aria-labelledby="about-delivery-title" className="card about">
+			<h2 id="about-delivery-title" ref={title} tabIndex={-1}>
+				{t("onboarding.delivery.title")}
+			</h2>
+			<DeliveryExplanation />
+			<div>
+				<button onClick={onBack} type="button">
+					{t("about.back")}
+				</button>
+			</div>
+		</section>
 	);
 }

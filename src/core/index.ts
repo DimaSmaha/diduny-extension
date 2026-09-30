@@ -50,7 +50,7 @@ export {
 	matchesShortcut,
 	normalizeShortcut,
 } from "./shortcuts";
-export { isValidEmail, isValidOtp } from "./auth-validation";
+export { isValidEmail, isValidOtp, normalizeEmail } from "./auth-validation";
 export {
 	RealtimeSession,
 	RealtimeSessionError,

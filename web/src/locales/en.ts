@@ -47,14 +47,31 @@ export const en = {
 		couldNotSendCode: "Could not send the code.",
 		couldNotVerifyCode: "Could not verify the code.",
 		signedOut: "Signed out.",
+		invalidEmail: "Enter a valid email address, like name@example.com.",
+		signOutConfirm: {
+			title: "Sign out of Diduny?",
+			body: "You'll need a new one-time code to sign in again.",
+			confirm: "Sign out",
+			cancel: "Stay signed in",
+		},
+	},
+	theme: {
+		label: "Theme",
+		system: "System",
+		light: "Light",
+		dark: "Dark",
+	},
+	about: {
+		back: "Back to dictation",
 	},
 	onboarding: {
-		close: "Close onboarding",
-		continue: "Continue",
+		intro: "Before you sign in, here's how Diduny works.",
 		continueToSignIn: "Continue to sign in",
 		microphone: {
 			title: "Use your microphone",
 			body: "Diduny needs microphone access before it can transcribe your words.",
+			optional:
+				"This is optional now - the browser will also ask when you start your first dictation.",
 			allow: "Allow microphone",
 			granted: "Microphone access is ready.",
 			denied:

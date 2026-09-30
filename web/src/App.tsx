@@ -8,19 +8,26 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { isValidEmail, isValidOtp } from "../../src/core/auth-validation";
+import {
+	isValidEmail,
+	isValidOtp,
+	normalizeEmail,
+} from "../../src/core/auth-validation";
 import { AUDIO_FORMAT, WEB_LATENCY_TARGET_MS } from "../../src/core/constants";
 import type { RetentionPolicy } from "../../src/core/ports";
 import type { RealtimeToken } from "../../src/core/realtime-session";
 import { createSpeechPreCheckAccumulator } from "../../src/core/speech-precheck";
 import { CommandPalette } from "./CommandPalette";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { LibraryPane } from "./LibraryPane";
 import {
-	Onboarding,
+	AboutDelivery,
+	StartPage,
 	onboardingCompletedStorageKey,
 	pendingRetentionStorageKey,
 } from "./Onboarding";
 import { SettingsPane } from "./SettingsPane";
+import { AppBar, ThemeSwitcher } from "./ThemeSwitcher";
 import {
 	audioCaptureConstraints,
 	savedMicrophoneUnavailable,
@@ -39,6 +46,7 @@ import {
 } from "./dictation";
 import {
 	errorFromResponse,
+	isInvalidEmailError,
 	localProcessUnavailable,
 	userErrorMessage,
 } from "./errors";
@@ -67,7 +75,7 @@ import "./style.css";
 
 type AuthState = "checking" | "otp-sent" | "signed-in" | "signed-out";
 type CaptureState = "idle" | "recording" | "sending";
-type WorkspaceView = "dictation" | "library" | "settings";
+type WorkspaceView = "about" | "dictation" | "library" | "settings";
 
 interface ActiveCapture {
 	audioContext: AudioContext;
@@ -197,9 +205,11 @@ export function App() {
 	const [authState, setAuthState] = useState<AuthState>("checking");
 	const [announceLiveTranscript, setAnnounceLiveTranscript] = useState(false);
 	const [captureState, setCaptureState] = useState<CaptureState>("idle");
+	const [confirmingSignOut, setConfirmingSignOut] = useState(false);
 	const [documentText, setDocumentText] = useState("");
 	const [dictationShortcut, setDictationShortcut] = useState(DEFAULT_SHORTCUT);
 	const [email, setEmail] = useState("");
+	const [emailError, setEmailError] = useState("");
 	const [elapsed, setElapsed] = useState(0);
 	const [language, setLanguage] = useState("uk");
 	const [level, setLevel] = useState(0);
@@ -229,8 +239,9 @@ export function App() {
 	const captureRef = useRef<ActiveCapture | null>(null);
 	const documentInput = useRef<HTMLTextAreaElement>(null);
 	const holdCaptureRef = useRef(false);
-	const onboardingReturnFocus = useRef<HTMLButtonElement>(null);
+	const aboutReturnFocus = useRef<HTMLButtonElement>(null);
 	const paletteReturnFocus = useRef<HTMLElement | null>(null);
+	const signOutReturnFocus = useRef<HTMLButtonElement>(null);
 	const pictureInPictureWindow = useRef<Window | null>(null);
 	const recordingLockReleaseRef = useRef<(() => void) | null>(null);
 	const recoveryAttemptedRef = useRef(false);
@@ -755,6 +766,7 @@ export function App() {
 
 	useEffect(() => {
 		const onShortcut = (event: KeyboardEvent) => {
+			if (confirmingSignOut) return;
 			if (event.key === "Escape" && isCommandPaletteOpen) {
 				event.preventDefault();
 				closeCommandPalette();
@@ -786,6 +798,7 @@ export function App() {
 	}, [
 		cancelCapture,
 		closeCommandPalette,
+		confirmingSignOut,
 		dictationShortcut,
 		finishCapture,
 		isCommandPaletteOpen,
@@ -830,22 +843,38 @@ export function App() {
 		[cancelCapture],
 	);
 
+	function clearSignInFields() {
+		setEmail("");
+		setEmailError("");
+		setOtp("");
+	}
+
 	async function sendOtp(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
-		if (!isValidEmail(email)) {
-			setStatus(t("errors.requestRejected"));
+		const address = normalizeEmail(email);
+		if (!isValidEmail(address)) {
+			setEmailError(t("auth.invalidEmail"));
+			setStatus("");
 			return;
 		}
+		setEmail(address);
+		setEmailError("");
 		setStatus(t("auth.sendingCode"));
 		try {
 			await bffJson("/bff/auth/send-otp", {
-				body: JSON.stringify({ email }),
+				body: JSON.stringify({ email: address }),
 				headers: { "content-type": "application/json" },
 				method: "POST",
 			});
+			setOtp("");
 			setAuthState("otp-sent");
 			setStatus(t("auth.checkInbox"));
 		} catch (error) {
+			if (isInvalidEmailError(error)) {
+				setEmailError(t("auth.invalidEmail"));
+				setStatus("");
+				return;
+			}
 			setStatus(userErrorMessage(error, t));
 		}
 	}
@@ -863,20 +892,40 @@ export function App() {
 				headers: { "content-type": "application/json" },
 				method: "POST",
 			});
+			clearSignInFields();
 			await refreshSession();
 		} catch (error) {
 			setStatus(userErrorMessage(error, t));
 		}
 	}
 
+	function chooseAnotherEmail() {
+		clearSignInFields();
+		setAuthState("signed-out");
+		setStatus(t("status.signIn"));
+	}
+
 	async function signOut() {
+		setConfirmingSignOut(false);
 		await fetch("/bff/auth/logout", {
 			credentials: "same-origin",
 			method: "POST",
 		});
+		clearSignInFields();
+		setView("dictation");
 		setAuthState("signed-out");
 		setSignedInEmail("");
 		setStatus(t("auth.signedOut"));
+	}
+
+	function cancelSignOut() {
+		setConfirmingSignOut(false);
+		queueMicrotask(() => signOutReturnFocus.current?.focus());
+	}
+
+	function closeAboutDelivery() {
+		setView("dictation");
+		queueMicrotask(() => aboutReturnFocus.current?.focus());
 	}
 
 	async function copyDocument() {
@@ -926,15 +975,13 @@ export function App() {
 	}
 
 	if (onboardingOpen && authState !== "signed-in") {
-		return (
-			<Onboarding initialStep="microphone" onComplete={completeOnboarding} />
-		);
+		return <StartPage onContinue={completeOnboarding} />;
 	}
 
 	if (authState !== "signed-in") {
 		return (
 			<main className="shell auth">
-				<h1>{t("app.title")}</h1>
+				<AppBar />
 				<p>{t("auth.description")}</p>
 				{authState === "otp-sent" ? (
 					<form onSubmit={verifyOtp}>
@@ -949,21 +996,39 @@ export function App() {
 							value={otp}
 						/>
 						<button type="submit">{t("auth.signIn")}</button>
-						<button onClick={() => setAuthState("signed-out")} type="button">
+						<button
+							className="secondary"
+							onClick={chooseAnotherEmail}
+							type="button"
+						>
 							{t("auth.useAnotherEmail")}
 						</button>
 					</form>
 				) : (
-					<form onSubmit={sendOtp}>
+					// noValidate: the browser's type=email rule is stricter than RFC 5322; isValidEmail decides.
+					<form noValidate onSubmit={sendOtp}>
 						<label htmlFor="email">{t("auth.email")}</label>
 						<input
+							aria-describedby={emailError ? "email-error" : undefined}
+							aria-invalid={emailError ? true : undefined}
+							autoCapitalize="off"
 							autoComplete="email"
 							id="email"
-							onChange={(event) => setEmail(event.target.value)}
+							inputMode="email"
+							onChange={(event) => {
+								setEmail(event.target.value);
+								setEmailError("");
+							}}
 							required
-							type="email"
+							spellCheck={false}
+							type="text"
 							value={email}
 						/>
+						{emailError ? (
+							<p className="field-error" id="email-error">
+								{emailError}
+							</p>
+						) : null}
 						<button type="submit">{t("auth.sendCode")}</button>
 					</form>
 				)}
@@ -1009,33 +1074,41 @@ export function App() {
 						</button>
 					</nav>
 					<button
+						aria-current={view === "about" ? "page" : undefined}
 						disabled={captureState !== "idle"}
-						onClick={() => setOnboardingOpen(true)}
-						ref={onboardingReturnFocus}
+						onClick={() => setView("about")}
+						ref={aboutReturnFocus}
 						type="button"
 					>
 						{t("app.nav.aboutDelivery")}
 					</button>
-					<button onClick={() => void signOut()} type="button">
+					<button
+						disabled={captureState !== "idle"}
+						onClick={() => setConfirmingSignOut(true)}
+						ref={signOutReturnFocus}
+						type="button"
+					>
 						{t("app.nav.signOut")}
 					</button>
+					<ThemeSwitcher />
 				</div>
 			</header>
-			{onboardingOpen ? (
-				<Onboarding
-					asDialog
-					initialStep="delivery"
-					onClose={() => {
-						setOnboardingOpen(false);
-						queueMicrotask(() => onboardingReturnFocus.current?.focus());
-					}}
-					onComplete={completeOnboarding}
+			{confirmingSignOut ? (
+				<ConfirmDialog
+					body={t("auth.signOutConfirm.body")}
+					cancelLabel={t("auth.signOutConfirm.cancel")}
+					confirmLabel={t("auth.signOutConfirm.confirm")}
+					onCancel={cancelSignOut}
+					onConfirm={() => void signOut()}
+					title={t("auth.signOutConfirm.title")}
 				/>
 			) : null}
 			{isCommandPaletteOpen ? (
 				<CommandPalette onClose={closeCommandPalette} onCopied={setStatus} />
 			) : null}
-			{view === "library" ? (
+			{view === "about" ? (
+				<AboutDelivery onBack={closeAboutDelivery} />
+			) : view === "library" ? (
 				<LibraryPane
 					onLibraryChanged={broadcastWorkspaceChange}
 					revision={workspaceRevision}
