@@ -1,4 +1,4 @@
-export const DEFAULT_DICTATION_SHORTCUT = "Alt+Shift+D";
+export const DEFAULT_DICTATION_SHORTCUT = "Alt+Shift+V";
 
 export interface ShortcutEvent {
 	altKey: boolean;
@@ -79,6 +79,14 @@ export function normalizeShortcut(value: unknown): string | null {
 export function isReservedShortcut(value: string) {
 	const shortcut = normalizeShortcut(value);
 	return shortcut !== null && reservedShortcuts.has(shortcut);
+}
+
+/** Ctrl, Alt, and Meta chords type nothing, so they may fire while a text field has focus. */
+export function firesInTextFields(value: string) {
+	const shortcut = normalizeShortcut(value);
+	if (!shortcut) return false;
+	const modifiers = shortcut.split("+").slice(0, -1);
+	return ["Ctrl", "Alt", "Meta"].some((name) => modifiers.includes(name));
 }
 
 export function matchesShortcut(event: ShortcutEvent, shortcut: string) {

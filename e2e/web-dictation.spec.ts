@@ -65,9 +65,7 @@ test("web dictation cancels safely, uses keyboard and hold controls, and relays 
 		await page.getByRole("button", { name: "Save shortcut" }).click();
 		await expect(page.getByText("Shortcut saved: Alt+Shift+M.")).toBeVisible();
 		await page.getByRole("button", { name: "Dictation" }).click();
-		await expect(
-			page.getByText("Shortcut: Alt+Shift+M outside text fields."),
-		).toBeVisible();
+		await expect(page.getByText("Shortcut: Alt + Shift + M")).toBeVisible();
 
 		const document = page.getByLabel("Dictation document");
 		await document.focus();
@@ -76,9 +74,11 @@ test("web dictation cancels safely, uses keyboard and hold controls, and relays 
 		expect(transcriptionRequests).toBe(0);
 		await document.fill("");
 
-		await page.keyboard.press("Tab");
+		// Alt chords type nothing, so the shortcut works with the cursor in the document.
+		await document.focus();
 		await page.keyboard.press("Alt+Shift+M");
 		await expect(page.getByText("Listening…")).toBeVisible();
+		await expect(document).toHaveValue("");
 		await page.keyboard.press("Escape");
 		await expect(page.getByText("Dictation cancelled.")).toBeVisible();
 		expect(transcriptionRequests).toBe(0);
@@ -120,9 +120,16 @@ test("web dictation cancels safely, uses keyboard and hold controls, and relays 
 			"0",
 		);
 		const recordButton = page.getByRole("button", { name: "Hold to record" });
+		const idleBox = await recordButton.boundingBox();
 		await recordButton.hover();
 		await page.mouse.down();
 		await expect(page.getByText("Listening…")).toBeVisible();
+		// While held, only the hold button shows, and it stays under the pointer.
+		await expect(recordButton).toHaveAttribute("aria-pressed", "true");
+		await expect(recordButton).toBeEnabled();
+		expect(await recordButton.boundingBox()).toEqual(idleBox);
+		for (const name of ["Stop dictation", "Cancel", "Copy"])
+			await expect(page.getByRole("button", { name })).toBeHidden();
 		await expect(page.getByLabel("Microphone level")).toHaveAttribute(
 			"aria-valuenow",
 			/[1-9]/,
@@ -130,7 +137,7 @@ test("web dictation cancels safely, uses keyboard and hold controls, and relays 
 		await expect(page.locator(".meter-row output")).toHaveText("1s");
 		await page.mouse.up();
 		await expect(document).toHaveValue(
-			"Hello from web dictation Hello from web dictation",
+			"Hello from web dictation\n---\nHello from web dictation",
 		);
 		expect(transcriptionRequests).toBe(2);
 		await expect
@@ -139,7 +146,7 @@ test("web dictation cancels safely, uses keyboard and hold controls, and relays 
 		await page.getByRole("button", { name: "Copy" }).click();
 		await expect
 			.poll(() => page.evaluate(() => navigator.clipboard.readText()))
-			.toBe("Hello from web dictation Hello from web dictation");
+			.toBe("Hello from web dictation\n---\nHello from web dictation");
 	} finally {
 		bff.server.closeAllConnections?.();
 		upstream.server.closeAllConnections?.();

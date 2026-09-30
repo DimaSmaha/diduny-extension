@@ -16,6 +16,7 @@ import {
 import { AUDIO_FORMAT, WEB_LATENCY_TARGET_MS } from "../../src/core/constants";
 import type { RetentionPolicy } from "../../src/core/ports";
 import type { RealtimeToken } from "../../src/core/realtime-session";
+import { DEFAULT_SETTINGS } from "../../src/core/settings";
 import { createSpeechPreCheckAccumulator } from "../../src/core/speech-precheck";
 import { CommandPalette } from "./CommandPalette";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -26,7 +27,7 @@ import {
 	onboardingCompletedStorageKey,
 	pendingRetentionStorageKey,
 } from "./Onboarding";
-import { SettingsPane } from "./SettingsPane";
+import { SettingsPane, type SettingsSection } from "./SettingsPane";
 import { AppBar, ThemeSwitcher } from "./ThemeSwitcher";
 import {
 	audioCaptureConstraints,
@@ -40,6 +41,7 @@ import { createPcmCapture } from "./capture";
 import {
 	DEFAULT_SHORTCUT,
 	appendTranscript,
+	firesInTextFields,
 	isEditableTarget,
 	matchesCommandPaletteShortcut,
 	matchesDictationShortcut,
@@ -52,6 +54,7 @@ import {
 } from "./errors";
 import i18n, { setUiLocale } from "./i18n";
 import { createWorkspaceInvalidationBus } from "./invalidation";
+import { dictationLanguages, ownLanguageName } from "./languages";
 import { saveToLibrary } from "./library";
 import {
 	copyDocumentStyles,
@@ -65,7 +68,16 @@ import {
 	type ScratchStorage,
 	createScratchStorage,
 } from "./scratch-storage";
-import { getWorkspaceSettings, updateRetentionPolicy } from "./settings";
+import {
+	getWorkspaceSettings,
+	updateRetentionPolicy,
+	updateWorkspaceSettings,
+} from "./settings";
+import {
+	displayShortcut,
+	parseShortcut,
+	shortcutPlatform,
+} from "./shortcut-editor";
 import {
 	buildTranscriptionConfig,
 	translationResultText,
@@ -211,7 +223,7 @@ export function App() {
 	const [email, setEmail] = useState("");
 	const [emailError, setEmailError] = useState("");
 	const [elapsed, setElapsed] = useState(0);
-	const [language, setLanguage] = useState("uk");
+	const [holding, setHolding] = useState(false);
 	const [level, setLevel] = useState(0);
 	const [liveFinalText, setLiveFinalText] = useState("");
 	const [liveProvisionalText, setLiveProvisionalText] = useState("");
@@ -225,7 +237,12 @@ export function App() {
 		() => localStorage.getItem(onboardingCompletedStorageKey) !== "1",
 	);
 	const [otp, setOtp] = useState("");
+	const [pasteOpen, setPasteOpen] = useState(false);
+	const [settingsFocus, setSettingsFocus] = useState<SettingsSection>();
 	const [signedInEmail, setSignedInEmail] = useState("");
+	const [speechLanguageHints, setSpeechLanguageHints] = useState<
+		readonly string[]
+	>(DEFAULT_SETTINGS.speechLanguageHints);
 	const [status, setStatus] = useState(() => t("app.checkingSession"));
 	const [translationMode, setTranslationMode] = useState(false);
 	const [translationResult, setTranslationResult] = useState("");
@@ -420,6 +437,7 @@ export function App() {
 			setAnnounceLiveTranscript(false);
 			setDictationShortcut(DEFAULT_SHORTCUT);
 			setMicrophoneDeviceId(null);
+			setSpeechLanguageHints(DEFAULT_SETTINGS.speechLanguageHints);
 			setTranslationSourceLanguage("uk");
 			setTranslationTargetLanguage("en");
 			void setUiLocale("en");
@@ -430,6 +448,7 @@ export function App() {
 				setAnnounceLiveTranscript(settings.announceLiveTranscript);
 				setDictationShortcut(settings.dictationShortcut);
 				setMicrophoneDeviceId(settings.microphoneDeviceId);
+				setSpeechLanguageHints(settings.speechLanguageHints);
 				setTranslationSourceLanguage(settings.translationSourceLanguage);
 				setTranslationTargetLanguage(settings.translationTargetLanguage);
 				void setUiLocale(settings.uiLocale);
@@ -438,6 +457,7 @@ export function App() {
 				setAnnounceLiveTranscript(false);
 				setDictationShortcut(DEFAULT_SHORTCUT);
 				setMicrophoneDeviceId(null);
+				setSpeechLanguageHints(DEFAULT_SETTINGS.speechLanguageHints);
 				setTranslationSourceLanguage("uk");
 				setTranslationTargetLanguage("en");
 				void setUiLocale("en");
@@ -447,6 +467,7 @@ export function App() {
 	const cancelCapture = useCallback(async () => {
 		holdCaptureRef.current = false;
 		stopHoldWhenReadyRef.current = false;
+		setHolding(false);
 		const capture = captureRef.current;
 		if (!capture) {
 			releaseRecordingLock();
@@ -517,10 +538,7 @@ export function App() {
 				);
 				const languageHints = translationMode
 					? [translationSourceLanguage]
-					: language
-							.split(",")
-							.map((value) => value.trim())
-							.filter(Boolean);
+					: speechLanguageHints;
 				form.append(
 					"config",
 					new Blob(
@@ -594,6 +612,7 @@ export function App() {
 			closeFloatingPanel();
 			setCaptureState("idle");
 			setElapsed(0);
+			setHolding(false);
 			setLevel(0);
 			setLiveFinalText("");
 			setLiveProvisionalText("");
@@ -601,8 +620,8 @@ export function App() {
 	}, [
 		closeFloatingPanel,
 		invalidateWorkspace,
-		language,
 		releaseRecordingLock,
+		speechLanguageHints,
 		translationMode,
 		translationSourceLanguage,
 		translationTargetLanguage,
@@ -648,10 +667,7 @@ export function App() {
 			let recoveryText = "";
 			const languageHints = translationMode
 				? [translationSourceLanguage]
-				: language
-						.split(",")
-						.map((value) => value.trim())
-						.filter(Boolean);
+				: speechLanguageHints;
 			realtime = startWebRealtime({
 				config: {
 					audio_format: AUDIO_FORMAT.wireFormat,
@@ -747,17 +763,19 @@ export function App() {
 			for (const track of stream?.getTracks() ?? []) track.stop();
 			void pipeline?.audioContext.close();
 			await scratch?.discard().catch(() => undefined);
+			holdCaptureRef.current = false;
 			stopHoldWhenReadyRef.current = false;
+			setHolding(false);
 			releaseRecordingLock();
 			setStatus(t("status.couldNotStartMicrophone"));
 		}
 	}, [
 		captureState,
 		finishCapture,
-		language,
 		microphoneDeviceId,
 		releaseRecordingLock,
 		scratchStorage,
+		speechLanguageHints,
 		translationMode,
 		translationSourceLanguage,
 		translationTargetLanguage,
@@ -786,7 +804,8 @@ export function App() {
 			if (
 				event.repeat ||
 				!matchesDictationShortcut(event, dictationShortcut) ||
-				isEditableTarget(event.target)
+				(isEditableTarget(event.target) &&
+					!firesInTextFields(dictationShortcut))
 			)
 				return;
 			event.preventDefault();
@@ -814,12 +833,14 @@ export function App() {
 		if (event.button !== 0 || captureRef.current || captureState !== "idle")
 			return;
 		holdCaptureRef.current = true;
+		setHolding(true);
 		void startCapture();
 	}
 
 	const stopHoldCapture = useCallback(() => {
 		if (!holdCaptureRef.current) return;
 		holdCaptureRef.current = false;
+		setHolding(false);
 		if (captureRef.current) {
 			void finishCapture();
 		} else {
@@ -926,6 +947,33 @@ export function App() {
 	function closeAboutDelivery() {
 		setView("dictation");
 		queueMicrotask(() => aboutReturnFocus.current?.focus());
+	}
+
+	function showView(next: WorkspaceView) {
+		setSettingsFocus(undefined);
+		setView(next);
+	}
+
+	function openTranslationSettings() {
+		setSettingsFocus("translation");
+		setView("settings");
+	}
+
+	async function toggleLanguageHint(code: string, checked: boolean) {
+		const previous = speechLanguageHints;
+		const others = previous.filter((language) => language !== code);
+		const next = checked ? [...others, code] : others;
+		setSpeechLanguageHints(next);
+		try {
+			const settings = await updateWorkspaceSettings({
+				speechLanguageHints: next,
+			});
+			setSpeechLanguageHints(settings.speechLanguageHints);
+			broadcastWorkspaceChange();
+		} catch (error) {
+			setSpeechLanguageHints(previous);
+			setStatus(userErrorMessage(error, t));
+		}
 	}
 
 	async function copyDocument() {
@@ -1043,15 +1091,23 @@ export function App() {
 	return (
 		<main className="shell workspace">
 			<header>
-				<div>
-					<h1>{t("app.title")}</h1>
-					<p>{signedInEmail}</p>
+				<div className="brand-block">
+					<h1>
+						<button
+							className="brand"
+							onClick={() => showView("dictation")}
+							type="button"
+						>
+							{t("app.title")}
+						</button>
+					</h1>
+					<p className="account">{signedInEmail}</p>
 				</div>
 				<div className="workspace-actions">
 					<nav aria-label={t("app.workspace")}>
 						<button
 							aria-current={view === "dictation" ? "page" : undefined}
-							onClick={() => setView("dictation")}
+							onClick={() => showView("dictation")}
 							type="button"
 						>
 							{t("app.nav.dictation")}
@@ -1059,7 +1115,7 @@ export function App() {
 						<button
 							aria-current={view === "library" ? "page" : undefined}
 							disabled={captureState !== "idle"}
-							onClick={() => setView("library")}
+							onClick={() => showView("library")}
 							type="button"
 						>
 							{t("app.nav.library")}
@@ -1067,7 +1123,7 @@ export function App() {
 						<button
 							aria-current={view === "settings" ? "page" : undefined}
 							disabled={captureState !== "idle"}
-							onClick={() => setView("settings")}
+							onClick={() => showView("settings")}
 							type="button"
 						>
 							{t("app.nav.settings")}
@@ -1076,7 +1132,7 @@ export function App() {
 					<button
 						aria-current={view === "about" ? "page" : undefined}
 						disabled={captureState !== "idle"}
-						onClick={() => setView("about")}
+						onClick={() => showView("about")}
 						ref={aboutReturnFocus}
 						type="button"
 					>
@@ -1115,63 +1171,80 @@ export function App() {
 				/>
 			) : view === "settings" ? (
 				<SettingsPane
+					focusSection={settingsFocus}
 					onSettingsChanged={invalidateWorkspace}
 					revision={workspaceRevision}
 				/>
 			) : (
-				<>
-					<label className="language" htmlFor="language">
-						{t("dictation.languageHints")}
-						<input
-							id="language"
-							onChange={(event) => setLanguage(event.target.value)}
-							value={language}
-						/>
-					</label>
-					<label className="checkbox" htmlFor="translation-mode">
-						<input
-							checked={translationMode}
-							disabled={captureState !== "idle"}
-							id="translation-mode"
-							onChange={(event) => setTranslationMode(event.target.checked)}
-							type="checkbox"
-						/>
-						{t("dictation.translationMode")}
-					</label>
-					{translationMode ? (
-						<p>
-							{t("dictation.translates", {
-								source: translationSourceLanguage,
-								target: translationTargetLanguage,
-							})}
+				<div className="dictation">
+					<fieldset
+						aria-describedby="language-hints-hint"
+						className="language-hints"
+						disabled={captureState !== "idle" || translationMode}
+					>
+						<legend>{t("dictation.languages")}</legend>
+						{dictationLanguages.map((code) => (
+							<label
+								className="checkbox pill"
+								htmlFor={`language-hint-${code}`}
+								key={code}
+							>
+								<input
+									checked={speechLanguageHints.includes(code)}
+									id={`language-hint-${code}`}
+									onChange={(event) =>
+										void toggleLanguageHint(code, event.target.checked)
+									}
+									type="checkbox"
+								/>
+								<span lang={code}>{ownLanguageName(code)}</span>
+							</label>
+						))}
+						<p className="hint" id="language-hints-hint">
+							{translationMode
+								? t("dictation.languagesInTranslation", {
+										source: ownLanguageName(translationSourceLanguage),
+									})
+								: t("dictation.languagesHint")}
 						</p>
-					) : null}
+					</fieldset>
+					<div className="translation-row">
+						<label className="checkbox" htmlFor="translation-mode">
+							<input
+								aria-describedby="translation-pair"
+								checked={translationMode}
+								disabled={captureState !== "idle"}
+								id="translation-mode"
+								onChange={(event) => setTranslationMode(event.target.checked)}
+								type="checkbox"
+							/>
+							{t("dictation.translationMode")}
+						</label>
+						<span className="translation-pair" id="translation-pair">
+							{t("dictation.translates", {
+								source: ownLanguageName(translationSourceLanguage),
+								target: ownLanguageName(translationTargetLanguage),
+							})}
+						</span>
+						<button
+							className="secondary"
+							disabled={captureState !== "idle"}
+							onClick={openTranslationSettings}
+							type="button"
+						>
+							{t("dictation.changeLanguages")}
+						</button>
+					</div>
 					<textarea
 						aria-label={t("dictation.document")}
+						className="document"
 						ref={documentInput}
 						onChange={(event) => setDocumentText(event.target.value)}
 						placeholder={t("dictation.documentPlaceholder")}
 						value={documentText}
 					/>
-					{captureState !== "idle" && !pictureInPictureContainer ? (
-						<LiveTranscriptPanel
-							announceLiveTranscript={announceLiveTranscript}
-							liveFinalText={liveFinalText}
-							liveProvisionalText={liveProvisionalText}
-						/>
-					) : null}
-					{pictureInPictureContainer
-						? createPortal(
-								<LiveTranscriptPanel
-									announceLiveTranscript={announceLiveTranscript}
-									liveFinalText={liveFinalText}
-									liveProvisionalText={liveProvisionalText}
-									onReturnToPage={closeFloatingPanel}
-								/>,
-								pictureInPictureContainer,
-							)
-						: null}
-					<div className="controls">
+					{/* While a hold is active only its button stays visible; the others keep their space so it never moves. */}
+					<div className={holding ? "controls holding" : "controls"}>
 						<button
 							disabled={captureState === "sending"}
 							onClick={toggleCapture}
@@ -1180,7 +1253,10 @@ export function App() {
 							{isRecording ? t("dictation.stop") : t("dictation.start")}
 						</button>
 						<button
-							disabled={captureState !== "idle"}
+							aria-pressed={holding}
+							className="hold"
+							disabled={captureState !== "idle" && !holding}
+							onContextMenu={(event) => event.preventDefault()}
 							onPointerCancel={stopHoldCapture}
 							onPointerDown={startHoldCapture}
 							onPointerUp={stopHoldCapture}
@@ -1196,6 +1272,7 @@ export function App() {
 							{t("dictation.cancel")}
 						</button>
 						{captureState !== "idle" &&
+						!holding &&
 						capabilities.documentPictureInPicture &&
 						!pictureInPictureContainer ? (
 							<button onClick={() => void openFloatingPanel()} type="button">
@@ -1229,44 +1306,78 @@ export function App() {
 									? t("dictation.meterSending")
 									: t("dictation.meterIdle")}
 						</output>
-					</div>
-					<p className="shortcut">
-						{t("dictation.shortcut", { shortcut: dictationShortcut })}
-					</p>
-					<section
-						aria-labelledby="paste-translation-title"
-						className="settings-section"
-					>
-						<h2 id="paste-translation-title">{t("dictation.pasteTitle")}</h2>
-						<p>{t("dictation.pasteDescription")}</p>
-						<label htmlFor="translation-text">
-							{t("dictation.textToTranslate")}
-							<textarea
-								id="translation-text"
-								onChange={(event) => setTranslationText(event.target.value)}
-								value={translationText}
-							/>
-						</label>
-						<button
-							disabled={!translationText.trim()}
-							onClick={() => void translatePastedText()}
-							type="button"
+						<p
+							aria-live="polite"
+							className="status"
+							ref={statusElement}
+							tabIndex={-1}
 						>
-							{t("dictation.translatePasted")}
-						</button>
-						<output aria-label={t("dictation.translationResult")}>
-							{translationResult}
-						</output>
-					</section>
-					<p
-						aria-live="polite"
-						className="status"
-						ref={statusElement}
-						tabIndex={-1}
+							{status}
+						</p>
+						<p className="shortcut">
+							{t(
+								firesInTextFields(dictationShortcut)
+									? "dictation.shortcut"
+									: "dictation.shortcutOutsideFields",
+								{
+									shortcut: displayShortcut(
+										parseShortcut(dictationShortcut),
+										shortcutPlatform(),
+									),
+								},
+							)}
+						</p>
+					</div>
+					{captureState !== "idle" && !pictureInPictureContainer ? (
+						<LiveTranscriptPanel
+							announceLiveTranscript={announceLiveTranscript}
+							liveFinalText={liveFinalText}
+							liveProvisionalText={liveProvisionalText}
+						/>
+					) : null}
+					{pictureInPictureContainer
+						? createPortal(
+								<LiveTranscriptPanel
+									announceLiveTranscript={announceLiveTranscript}
+									liveFinalText={liveFinalText}
+									liveProvisionalText={liveProvisionalText}
+									onReturnToPage={closeFloatingPanel}
+								/>,
+								pictureInPictureContainer,
+							)
+						: null}
+					<details
+						className="paste-translation"
+						onToggle={(event) => setPasteOpen(event.currentTarget.open)}
+						open={pasteOpen}
 					>
-						{status}
-					</p>
-				</>
+						<summary>{t("dictation.pasteTitle")}</summary>
+						<div className="paste-body">
+							<p className="hint">{t("dictation.pasteDescription")}</p>
+							<label htmlFor="translation-text">
+								{t("dictation.textToTranslate")}
+								<textarea
+									id="translation-text"
+									onChange={(event) => setTranslationText(event.target.value)}
+									value={translationText}
+								/>
+							</label>
+							<button
+								disabled={!translationText.trim()}
+								onClick={() => void translatePastedText()}
+								type="button"
+							>
+								{t("dictation.translatePasted")}
+							</button>
+							<output
+								aria-label={t("dictation.translationResult")}
+								className="translation-result"
+							>
+								{translationResult}
+							</output>
+						</div>
+					</details>
+				</div>
 			)}
 		</main>
 	);

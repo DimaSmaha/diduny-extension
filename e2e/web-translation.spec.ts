@@ -80,7 +80,16 @@ test("translation dictation and pasted text use the explicit saved language pair
 			.toBe("en");
 
 		await page.getByRole("button", { name: "Dictation" }).click();
+		await expect(page.getByText("Українська → English")).toBeVisible();
+		await page.getByRole("button", { name: "Change languages" }).click();
+		await expect(
+			page.getByRole("heading", { name: "Translation languages" }),
+		).toBeFocused();
+		await page.getByRole("button", { exact: true, name: "Diduny" }).click();
 		await page.getByLabel("Translation dictation").check();
+		await expect(
+			page.getByRole("checkbox", { name: "English" }),
+		).toBeDisabled();
 		await page.getByRole("button", { name: "Start dictation" }).click();
 		await expect(page.locator(".meter-row output")).toHaveText("1s");
 		await page.getByRole("button", { name: "Stop dictation" }).click();
@@ -91,6 +100,21 @@ test("translation dictation and pasted text use the explicit saved language pair
 		expect(transcriptionBody).toContain('"target_language":"en"');
 		expect(transcriptionBody).toContain('"language_hints":["uk"]');
 
+		await page.getByLabel("Translation dictation").uncheck();
+		await page.getByRole("checkbox", { name: "English" }).check();
+		await expect
+			.poll(() => e2eLibrary.settings().speechLanguageHints)
+			.toEqual(["uk", "en"]);
+		await page.getByRole("button", { name: "Start dictation" }).click();
+		await expect(page.locator(".meter-row output")).toHaveText("1s");
+		await page.getByRole("button", { name: "Stop dictation" }).click();
+		await expect(page.getByLabel("Dictation document")).toHaveValue(
+			"Hello from translation dictation\n---\nHello from translation dictation",
+		);
+		expect(transcriptionBody).toContain('"mode":"transcribe"');
+		expect(transcriptionBody).toContain('"language_hints":["uk","en"]');
+
+		await page.getByText("Paste-in translation", { exact: true }).click();
 		await page.getByLabel("Text to translate").fill("Привіт");
 		await page.getByRole("button", { name: "Translate pasted text" }).click();
 		await expect(page.getByLabel("Translation result")).toHaveText(

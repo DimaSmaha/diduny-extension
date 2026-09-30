@@ -9,6 +9,7 @@ export const resettableSettings = {
 	fillerWords: DEFAULT_SETTINGS.fillerWords,
 	microphoneDeviceId: DEFAULT_SETTINGS.microphoneDeviceId,
 	protectedLexicon: DEFAULT_SETTINGS.protectedLexicon,
+	speechLanguageHints: DEFAULT_SETTINGS.speechLanguageHints,
 	textCleanupEnabled: DEFAULT_SETTINGS.textCleanupEnabled,
 	translationSourceLanguage: DEFAULT_SETTINGS.translationSourceLanguage,
 	translationTargetLanguage: DEFAULT_SETTINGS.translationTargetLanguage,

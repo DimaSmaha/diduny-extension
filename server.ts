@@ -123,6 +123,7 @@ const workspaceSettingKeys = [
 	"fillerWords",
 	"microphoneDeviceId",
 	"protectedLexicon",
+	"speechLanguageHints",
 	"textCleanupEnabled",
 	"typingSpeedWordsPerMinute",
 	"translationSourceLanguage",
@@ -507,6 +508,12 @@ function validLanguage(value: unknown): value is string {
 	);
 }
 
+function validLanguageList(value: unknown): value is readonly string[] {
+	return (
+		Array.isArray(value) && value.length <= 10 && value.every(validLanguage)
+	);
+}
+
 function validTerms(value: unknown): value is readonly string[] {
 	return (
 		Array.isArray(value) &&
@@ -549,6 +556,8 @@ function parseWorkspaceSettings(value: unknown): Partial<Settings> | null {
 				settings.microphoneDeviceId.length > 512)) ||
 		("protectedLexicon" in settings &&
 			!validTerms(settings.protectedLexicon)) ||
+		("speechLanguageHints" in settings &&
+			!validLanguageList(settings.speechLanguageHints)) ||
 		("typingSpeedWordsPerMinute" in settings &&
 			settings.typingSpeedWordsPerMinute !== null &&
 			(typeof settings.typingSpeedWordsPerMinute !== "number" ||

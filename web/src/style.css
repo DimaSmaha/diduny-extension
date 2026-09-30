@@ -129,6 +129,7 @@ input[aria-invalid="true"] {
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
+summary:focus-visible,
 textarea:focus-visible,
 a:focus-visible {
 	outline: 3px solid var(--focus);
@@ -138,7 +139,7 @@ a:focus-visible {
 .shell {
 	width: min(100% - 2rem, 58rem);
 	margin: 0 auto;
-	padding: 2rem 0;
+	padding: 1.25rem 0 2rem;
 }
 
 .auth {
@@ -267,14 +268,17 @@ label.checkbox input {
 	gap: 0.7rem;
 }
 
-.auth form,
-.workspace {
+.auth form {
 	display: grid;
 	gap: 1rem;
 }
 
-.auth label,
-.language {
+.workspace {
+	display: grid;
+	gap: 0.9rem;
+}
+
+.auth label {
 	display: grid;
 	gap: 0.35rem;
 	font-weight: 600;
@@ -302,6 +306,30 @@ label.checkbox input {
 .workspace h1,
 .workspace header p {
 	margin: 0;
+}
+
+.workspace h1 {
+	font-size: 1.6rem;
+	line-height: 1.2;
+}
+
+button.brand {
+	min-height: 44px;
+	padding: 0;
+	border: none;
+	background: transparent;
+	color: inherit;
+	font-weight: inherit;
+}
+
+button.brand:hover {
+	text-decoration: underline;
+	text-underline-offset: 0.2em;
+}
+
+.workspace header .account {
+	color: var(--muted);
+	font-size: 0.9rem;
 }
 
 textarea {
@@ -353,6 +381,10 @@ textarea {
 .recording-detail p,
 .settings p {
 	margin: 0;
+}
+
+.settings h3[tabindex="-1"]:focus {
+	outline: none;
 }
 
 .settings > header {
@@ -554,6 +586,147 @@ button.toggle[aria-pressed="true"] {
 .recovered {
 	font-weight: 700;
 	color: var(--warning);
+}
+
+.dictation {
+	display: grid;
+	gap: 0.6rem;
+}
+
+.dictation p {
+	margin: 0;
+}
+
+.language-hints,
+.translation-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.4rem 0.6rem;
+}
+
+.language-hints {
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: none;
+}
+
+/* A floated legend is laid out like the other children, so it sits inline with the pills. */
+.language-hints legend {
+	float: left;
+	padding: 0;
+	font-weight: 600;
+}
+
+.language-hints .hint {
+	flex-basis: 100%;
+}
+
+label.checkbox.pill {
+	padding: 0 0.85rem;
+	border: 1px solid var(--border);
+	border-radius: 999px;
+	background: var(--surface);
+	font-weight: 500;
+}
+
+label.checkbox.pill:has(input:checked) {
+	border-color: var(--border-strong);
+	font-weight: 600;
+}
+
+label.checkbox.pill:has(input:disabled) {
+	opacity: 0.6;
+}
+
+.translation-pair {
+	color: var(--muted);
+}
+
+textarea.document {
+	min-height: 14rem;
+}
+
+.controls {
+	flex-wrap: wrap;
+}
+
+/* Keep the space of hidden buttons so the held button never moves. */
+.controls.holding > :not(.hold) {
+	visibility: hidden;
+}
+
+button.hold {
+	touch-action: none;
+	user-select: none;
+	-webkit-user-select: none;
+	-webkit-touch-callout: none;
+}
+
+button.hold[aria-pressed="true"] {
+	border-color: var(--meter-fill);
+	background: var(--meter-fill);
+	color: var(--button-text);
+}
+
+.meter-row {
+	flex-wrap: wrap;
+	gap: 0.4rem 0.7rem;
+}
+
+.meter-row .status {
+	flex: 1 1 12rem;
+}
+
+.meter-row .shortcut {
+	margin-left: auto;
+	font-size: 0.9rem;
+}
+
+.paste-translation {
+	border: 1px solid var(--border-subtle);
+	border-radius: 0.5rem;
+	background: var(--surface);
+}
+
+.paste-translation summary {
+	min-height: 44px;
+	padding: 0.65rem 0.9rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.paste-body {
+	display: grid;
+	gap: 0.6rem;
+	padding: 0 0.9rem 0.9rem;
+}
+
+.paste-body label {
+	display: grid;
+	gap: 0.35rem;
+	font-weight: 600;
+}
+
+.paste-body textarea {
+	min-height: 6rem;
+}
+
+.paste-body button {
+	justify-self: start;
+}
+
+.translation-result {
+	padding: 0.6rem;
+	border: 1px solid var(--border-subtle);
+	border-radius: 0.4rem;
+	background: var(--bg);
+	white-space: pre-wrap;
+}
+
+.translation-result:empty {
+	display: none;
 }
 
 .meter {

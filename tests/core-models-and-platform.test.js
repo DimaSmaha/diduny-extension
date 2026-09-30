@@ -12,6 +12,7 @@ import {
 	createFakePlatform,
 	displayRecordingText,
 	effectiveTypingSpeed,
+	normalizeSettings,
 	resolveTranscriptHistory,
 	timeSavedSeconds,
 	updateSettings,
@@ -81,6 +82,15 @@ test("resolves legacy history and keeps UI locale independent of speech settings
 		DEFAULT_SETTINGS.speechLanguageHints,
 	);
 	expect(ukrainianUi.microphoneDeviceId).toBe("built-in-mic");
+	expect(DEFAULT_SETTINGS.speechLanguageHints).toEqual(["uk"]);
+	expect(
+		normalizeSettings({
+			speechLanguageHints: ["uk", "en", "uk", "not a code", 7],
+		}).speechLanguageHints,
+	).toEqual(["uk", "en"]);
+	expect(
+		normalizeSettings({ speechLanguageHints: [] }).speechLanguageHints,
+	).toEqual([]);
 
 	const englishTranslation = updateSettings(DEFAULT_SETTINGS, {
 		translationSourceLanguage: "en",

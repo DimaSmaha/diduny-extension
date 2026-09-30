@@ -131,9 +131,13 @@ export const en = {
 			"Could not translate the pasted text. Check the Diduny service and try again.",
 	},
 	dictation: {
-		languageHints: "Language hints",
+		languages: "Spoken languages",
+		languagesHint: "Nothing ticked: Diduny detects the language itself.",
+		languagesInTranslation:
+			"Translation dictation listens for {source}, the source language in Settings.",
 		translationMode: "Translation dictation",
-		translates: "Translates {source} to {target}.",
+		translates: "{source} → {target}",
+		changeLanguages: "Change languages",
 		document: "Dictation document",
 		documentPlaceholder:
 			"Your dictation appears here. You can edit it while you work.",
@@ -146,7 +150,8 @@ export const en = {
 		meterSending: "Sending",
 		meterIdle: "Idle",
 		meterElapsed: "{seconds}s",
-		shortcut: "Shortcut: {shortcut} outside text fields.",
+		shortcut: "Shortcut: {shortcut}",
+		shortcutOutsideFields: "Shortcut: {shortcut} outside text fields",
 		pasteTitle: "Paste-in translation",
 		pasteDescription:
 			"Paste text into Diduny to translate it. Other applications are not read.",
@@ -234,7 +239,7 @@ export const en = {
 		toggleDictation: "Toggle dictation",
 		shortcutKey: "Key",
 		shortcutHelp:
-			"Turn on the modifier keys you want, then press a letter, digit, F1–F12, or Space in the Key field. You can also press the whole combination there. Shortcuts the browser reserves, like Ctrl+R, are refused.",
+			"Turn on the modifier keys you want, then press a letter, digit, F1–F12, or Space in the Key field. You can also press the whole combination there. With Ctrl, Alt, or Meta it also works while you type in the document. Shortcuts the browser reserves, like Ctrl+R, are refused.",
 		shortcutPreview: "Preview: {shortcut}",
 		shortcutNeedsKey: "Press a key to finish the shortcut.",
 		saveShortcut: "Save shortcut",

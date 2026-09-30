@@ -48,6 +48,7 @@ export {
 } from "./settings";
 export {
 	DEFAULT_DICTATION_SHORTCUT,
+	firesInTextFields,
 	isReservedShortcut,
 	matchesShortcut,
 	normalizeShortcut,

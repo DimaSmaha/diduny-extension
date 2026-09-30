@@ -195,9 +195,7 @@ test("the web library searches server-side and edits, copies, plays, and deletes
 			.poll(() => e2eLibrary.settings().dictationShortcut)
 			.toBe("Alt+Shift+M");
 		await page.getByRole("button", { name: "Dictation" }).click();
-		await expect(
-			page.getByText("Shortcut: Alt+Shift+M outside text fields."),
-		).toBeVisible();
+		await expect(page.getByText("Shortcut: Alt + Shift + M")).toBeVisible();
 		await page.getByRole("button", { name: "Settings" }).click();
 		// Build Ctrl+R from the toggles instead of pressing it, so the browser never reloads.
 		await page.getByRole("button", { exact: true, name: "Alt" }).click();

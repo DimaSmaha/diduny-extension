@@ -66,6 +66,9 @@ test("all web views pass axe and remain usable without horizontal scrolling at 2
 		await page.getByRole("button", { name: "Sign in", exact: true }).click();
 
 		await expectNoAxeViolations(page);
+		await page.getByText("Paste-in translation", { exact: true }).click();
+		await expect(page.getByLabel("Text to translate")).toBeVisible();
+		await expectNoAxeViolations(page);
 		expect(
 			await page
 				.locator("button, input:not([type=checkbox]), select")

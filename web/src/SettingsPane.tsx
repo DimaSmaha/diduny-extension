@@ -25,6 +25,7 @@ import {
 	setUiLocale,
 	supportedUiLocales,
 } from "./i18n";
+import { dictationLanguages, ownLanguageName } from "./languages";
 import {
 	type WorkspaceSettingsSnapshot,
 	getWorkspaceSettings,
@@ -50,12 +51,7 @@ const retentionOptions: ReadonlyArray<{
 	{ labelKey: "settings.retention.forever", value: "forever" },
 ];
 
-const translationLanguages = ["en", "uk"] as const;
 const MAX_TYPING_SPEED_WPM = 300;
-
-function ownLanguageName(code: (typeof translationLanguages)[number]) {
-	return new Intl.DisplayNames([code], { type: "language" }).of(code) ?? code;
-}
 
 function formatBytes(value: number) {
 	const units = ["B", "KB", "MB", "GB", "TB"];
@@ -231,10 +227,15 @@ function MicrophoneSettings({
 	);
 }
 
+export type SettingsSection = "translation";
+
 export function SettingsPane({
+	focusSection,
 	onSettingsChanged,
 	revision,
 }: {
+	/** Section to scroll to and focus once settings load, e.g. from the Dictation page. */
+	focusSection?: SettingsSection;
 	onSettingsChanged(): void;
 	revision: number;
 }) {
@@ -259,6 +260,8 @@ export function SettingsPane({
 	const [translationTargetLanguage, setTranslationTargetLanguage] =
 		useState("en");
 	const resetReturnFocus = useRef<HTMLButtonElement>(null);
+	const translationHeading = useRef<HTMLHeadingElement>(null);
+	const loaded = snapshot !== null;
 
 	const refresh = useCallback(async () => {
 		try {
@@ -288,6 +291,13 @@ export function SettingsPane({
 		void revision;
 		void refresh();
 	}, [refresh, revision]);
+
+	useEffect(() => {
+		if (!loaded || focusSection !== "translation") return;
+		const heading = translationHeading.current;
+		heading?.scrollIntoView({ block: "start" });
+		heading?.focus();
+	}, [focusSection, loaded]);
 
 	async function saveCleanup(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
@@ -577,7 +587,11 @@ export function SettingsPane({
 				aria-labelledby="translation-languages-title"
 				className="settings-section"
 			>
-				<h3 id="translation-languages-title">
+				<h3
+					id="translation-languages-title"
+					ref={translationHeading}
+					tabIndex={-1}
+				>
 					{t("settings.translationLanguages")}
 				</h3>
 				<form onSubmit={saveTranslationLanguages}>
@@ -590,7 +604,7 @@ export function SettingsPane({
 							}
 							value={translationSourceLanguage}
 						>
-							{translationLanguages.map((language) => (
+							{dictationLanguages.map((language) => (
 								<option key={language} value={language}>
 									{ownLanguageName(language)}
 								</option>
@@ -606,7 +620,7 @@ export function SettingsPane({
 							}
 							value={translationTargetLanguage}
 						>
-							{translationLanguages.map((language) => (
+							{dictationLanguages.map((language) => (
 								<option key={language} value={language}>
 									{ownLanguageName(language)}
 								</option>

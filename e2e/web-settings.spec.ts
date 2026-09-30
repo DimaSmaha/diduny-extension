@@ -52,6 +52,10 @@ test("settings: word chips, shortcut toggles, typing speed, instant language swi
 		await page.getByRole("button", { name: "Send one-time code" }).click();
 		await page.getByLabel("One-time code").fill("123456");
 		await page.getByRole("button", { name: "Sign in", exact: true }).click();
+		await page.getByRole("checkbox", { name: "English" }).check();
+		await expect
+			.poll(() => e2eLibrary.settings().speechLanguageHints)
+			.toEqual(["uk", "en"]);
 		await page.getByRole("button", { name: "Settings" }).click();
 
 		const fillers = page.getByRole("textbox", {
@@ -129,7 +133,8 @@ test("settings: word chips, shortcut toggles, typing speed, instant language swi
 		const restored = e2eLibrary.settings();
 		expect(restored.fillerWords).toEqual(DEFAULT_SETTINGS.fillerWords);
 		expect(restored.protectedLexicon).toEqual([]);
-		expect(restored.dictationShortcut).toBe("Alt+Shift+D");
+		expect(restored.dictationShortcut).toBe("Alt+Shift+V");
+		expect(restored.speechLanguageHints).toEqual(["uk"]);
 		expect(restored.typingSpeedWordsPerMinute).toBeNull();
 		expect(e2eLibrary.retention().dictation).toBe("never");
 		await expect(

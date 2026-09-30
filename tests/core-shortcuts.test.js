@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 import {
+	DEFAULT_DICTATION_SHORTCUT,
+	firesInTextFields,
 	isReservedShortcut,
 	matchesShortcut,
 	normalizeShortcut,
@@ -69,4 +71,14 @@ test("falls back to the physical key when a layout or macOS Option rewrites the 
 	expect(shortcutKeyFromEvent({ code: "Digit5", key: "∞" })).toBe("5");
 	expect(shortcutKeyFromEvent({ code: "F8", key: "F8" })).toBe("F8");
 	expect(shortcutKeyFromEvent({ code: "ShiftLeft", key: "Shift" })).toBeNull();
+});
+
+test("Ctrl, Alt, and Meta chords may fire while a text field has focus; typing keys may not", () => {
+	expect(DEFAULT_DICTATION_SHORTCUT).toBe("Alt+Shift+V");
+	expect(firesInTextFields(DEFAULT_DICTATION_SHORTCUT)).toBeTrue();
+	expect(firesInTextFields("Ctrl+M")).toBeTrue();
+	expect(firesInTextFields("Meta+Shift+K")).toBeTrue();
+	expect(firesInTextFields("Shift+K")).toBeFalse();
+	expect(firesInTextFields("Space")).toBeFalse();
+	expect(firesInTextFields("not a shortcut")).toBeFalse();
 });
