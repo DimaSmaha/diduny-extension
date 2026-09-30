@@ -15,6 +15,8 @@ export interface MockMailboxMessage {
 
 export interface MockProxyOptions {
 	accessToken?: string;
+	/** Number each transcript ("Mock transcript 3") so manual runs can tell results apart. */
+	numberTranscripts?: boolean;
 	refreshToken?: string;
 }
 
@@ -78,6 +80,7 @@ async function capturedBody(value: unknown) {
 
 export async function buildMockProxy({
 	accessToken = "mock-access-token",
+	numberTranscripts = false,
 	refreshToken: configuredRefreshToken = "mock-refresh-token",
 }: MockProxyOptions = {}) {
 	const server = Fastify({ logger: false });
@@ -93,6 +96,11 @@ export async function buildMockProxy({
 	let config = structuredClone(defaultConfig);
 	let omitUser = false;
 	let sseBody = defaultSseBody;
+	let transcriptCount = 0;
+	const nextTranscript = () =>
+		numberTranscripts
+			? `Mock transcript ${++transcriptCount}`
+			: "Mock transcript";
 	await server.register(websocket);
 	server.addContentTypeParser(
 		/^multipart\/form-data/i,
@@ -173,16 +181,10 @@ export async function buildMockProxy({
 		};
 		uploads.push(upload);
 		transcriptions.push(upload);
+		const text = nextTranscript();
 		return {
-			text: "Mock transcript",
-			tokens: [
-				{
-					end_ms: 480,
-					speaker: "1",
-					start_ms: 0,
-					text: "Mock transcript",
-				},
-			],
+			text,
+			tokens: [{ end_ms: 480, speaker: "1", start_ms: 0, text }],
 		};
 	});
 	server.post("/api/v1/transcriptions/clean", async (request, reply) => {
@@ -242,7 +244,7 @@ export async function buildMockProxy({
 								is_final: true,
 								...(diarization ? { speaker: "1" } : {}),
 								start_ms: 0,
-								text: "Mock transcript",
+								text: nextTranscript(),
 							},
 						],
 					}),

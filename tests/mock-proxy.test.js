@@ -214,3 +214,28 @@ test("exposes rotating sessions and mutable frozen-contract variants", async () 
 		await mock.server.close();
 	}
 });
+
+test("numbers transcripts only when asked, so tests keep the fixed text", async () => {
+	const transcribe = (mock) =>
+		mock.server
+			.inject({
+				headers: { authorization: "Bearer mock-access-token" },
+				method: "POST",
+				payload: {},
+				url: "/api/v1/transcriptions",
+			})
+			.then((response) => response.json());
+
+	const numbered = await buildMockProxy({ numberTranscripts: true });
+	const first = await transcribe(numbered);
+	const second = await transcribe(numbered);
+	expect(first.text).toBe("Mock transcript 1");
+	expect(first.tokens[0].text).toBe("Mock transcript 1");
+	expect(second.text).toBe("Mock transcript 2");
+	await numbered.server.close();
+
+	const fixed = await buildMockProxy();
+	expect((await transcribe(fixed)).text).toBe("Mock transcript");
+	expect((await transcribe(fixed)).text).toBe("Mock transcript");
+	await fixed.server.close();
+});
