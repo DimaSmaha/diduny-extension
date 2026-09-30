@@ -25,8 +25,8 @@ export default defineConfig({
 		commands: {
 			"toggle-recording": {
 				suggested_key: {
-					default: "Alt+Shift+D",
-					mac: "Alt+Shift+D",
+					default: "Alt+Shift+V",
+					mac: "Alt+Shift+V",
 				},
 				description: "Start/stop recording",
 			},
