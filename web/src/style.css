@@ -382,6 +382,124 @@ textarea {
 	width: auto;
 }
 
+.hint {
+	margin: 0;
+	color: var(--muted);
+	font-size: 0.95rem;
+	font-weight: 400;
+}
+
+.term-field {
+	display: grid;
+	gap: 0.35rem;
+}
+
+.term-box {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.4rem;
+	padding: 0.35rem;
+	border: 1px solid var(--border);
+	border-radius: 0.4rem;
+	background: var(--surface);
+}
+
+.term-box:has(input:focus-visible) {
+	outline: 3px solid var(--focus);
+	outline-offset: 3px;
+}
+
+.term-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.4rem;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.term-chips li {
+	display: inline-flex;
+	align-items: center;
+	padding-left: 0.75rem;
+	border: 1px solid var(--border-subtle);
+	border-radius: 999px;
+	background: var(--bg);
+}
+
+.term-chips button {
+	min-width: 44px;
+	padding: 0 0.6rem;
+	border: none;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--text);
+	font-size: 1.15rem;
+	line-height: 1;
+}
+
+.term-box input:not([type="checkbox"]) {
+	flex: 1 1 10rem;
+	width: auto;
+	border: none;
+	background: transparent;
+	padding: 0.4rem;
+}
+
+.term-box input:focus-visible {
+	outline: none;
+}
+
+.shortcut-field {
+	display: grid;
+	gap: 0.5rem;
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: none;
+}
+
+.shortcut-field legend {
+	margin-bottom: 0.35rem;
+	padding: 0;
+	font-weight: 600;
+}
+
+.shortcut-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 0.5rem;
+}
+
+button.toggle {
+	background: transparent;
+	color: var(--text);
+}
+
+button.toggle[aria-pressed="true"] {
+	background: var(--button-bg);
+	color: var(--button-text);
+}
+
+.shortcut-plus {
+	display: flex;
+	align-items: center;
+	min-height: 44px;
+	font-weight: 700;
+}
+
+.settings-section .shortcut-key input {
+	width: 6rem;
+	font-weight: 700;
+	text-align: center;
+}
+
+.shortcut-preview {
+	font-weight: 600;
+}
+
 .library-filters {
 	grid-template-columns: minmax(12rem, 1fr) repeat(2, minmax(9rem, 0.5fr)) auto;
 	align-items: end;

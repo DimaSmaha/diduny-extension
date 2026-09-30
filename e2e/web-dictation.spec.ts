@@ -61,7 +61,7 @@ test("web dictation cancels safely, uses keyboard and hold controls, and relays 
 		await page.getByLabel("One-time code").fill("123456");
 		await page.getByRole("button", { name: "Sign in", exact: true }).click();
 		await page.getByRole("button", { name: "Settings" }).click();
-		await page.getByLabel("Toggle dictation").fill("Alt+Shift+M");
+		await page.getByLabel("Key", { exact: true }).press("Alt+Shift+M");
 		await page.getByRole("button", { name: "Save shortcut" }).click();
 		await expect(page.getByText("Shortcut saved: Alt+Shift+M.")).toBeVisible();
 		await page.getByRole("button", { name: "Dictation" }).click();

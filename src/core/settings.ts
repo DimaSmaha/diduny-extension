@@ -30,6 +30,15 @@ export interface Settings {
 	uiLocale: UiLocale;
 }
 
+/** Typical adult typing speed, used for "time saved" until the user enters their own. */
+export const DEFAULT_TYPING_SPEED_WPM = 40;
+
+export function effectiveTypingSpeed(
+	settings: Pick<Settings, "typingSpeedWordsPerMinute">,
+) {
+	return settings.typingSpeedWordsPerMinute ?? DEFAULT_TYPING_SPEED_WPM;
+}
+
 // Defaults ported from SettingsStorage.swift:160-179, not its stale prose docs.
 export const DEFAULT_SETTINGS: Settings = {
 	announceLiveTranscript: false,

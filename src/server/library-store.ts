@@ -40,6 +40,7 @@ import type {
 import {
 	DEFAULT_SETTINGS,
 	type Settings,
+	effectiveTypingSpeed,
 	normalizeSettings,
 	textCleanupFromSettings,
 	updateSettings,
@@ -365,7 +366,7 @@ export class LibraryStore implements LibraryPort {
 			timeSavedSeconds: timeSavedSecondsForWords(
 				totalWords,
 				dictationDurationSeconds,
-				settings.typingSpeedWordsPerMinute,
+				effectiveTypingSpeed(settings),
 			),
 			wordCount: totalWords,
 		};

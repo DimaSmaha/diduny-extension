@@ -40,6 +40,8 @@ export {
 } from "./errors";
 export {
 	DEFAULT_SETTINGS,
+	DEFAULT_TYPING_SPEED_WPM,
+	effectiveTypingSpeed,
 	normalizeSettings,
 	textCleanupFromSettings,
 	updateSettings,
@@ -49,6 +51,7 @@ export {
 	isReservedShortcut,
 	matchesShortcut,
 	normalizeShortcut,
+	shortcutKeyFromEvent,
 } from "./shortcuts";
 export { isValidEmail, isValidOtp, normalizeEmail } from "./auth-validation";
 export {

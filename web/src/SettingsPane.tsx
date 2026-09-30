@@ -6,13 +6,12 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { wordCount } from "../../src/core/models";
 import type { RetentionCategory, RetentionPolicy } from "../../src/core/ports";
-import type { Settings } from "../../src/core/settings";
-import {
-	isReservedShortcut,
-	normalizeShortcut,
-} from "../../src/core/shortcuts";
+import { DEFAULT_TYPING_SPEED_WPM } from "../../src/core/settings";
+import { isReservedShortcut } from "../../src/core/shortcuts";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { ShortcutField } from "./ShortcutField";
+import { TermListInput } from "./TermListInput";
 import {
 	audioInputDevices,
 	microphonePermissionFailure,
@@ -29,9 +28,15 @@ import {
 import {
 	type WorkspaceSettingsSnapshot,
 	getWorkspaceSettings,
+	resettableSettings,
 	updateRetentionPolicy,
 	updateWorkspaceSettings,
 } from "./settings";
+import {
+	type ShortcutParts,
+	composeShortcut,
+	parseShortcut,
+} from "./shortcut-editor";
 
 const retentionOptions: ReadonlyArray<{
 	labelKey: string;
@@ -46,16 +51,10 @@ const retentionOptions: ReadonlyArray<{
 ];
 
 const translationLanguages = ["en", "uk"] as const;
+const MAX_TYPING_SPEED_WPM = 300;
 
 function ownLanguageName(code: (typeof translationLanguages)[number]) {
 	return new Intl.DisplayNames([code], { type: "language" }).of(code) ?? code;
-}
-
-function terms(value: string) {
-	return value
-		.split("\n")
-		.map((item) => item.trim())
-		.filter(Boolean);
 }
 
 function formatBytes(value: number) {
@@ -245,18 +244,21 @@ export function SettingsPane({
 	);
 	const [announceLiveTranscript, setAnnounceLiveTranscript] = useState(false);
 	const [cleanupEnabled, setCleanupEnabled] = useState(false);
-	const [dictationShortcut, setDictationShortcut] = useState("");
-	const [fillerWords, setFillerWords] = useState("");
-	const [lexicon, setLexicon] = useState("");
+	const [confirmingReset, setConfirmingReset] = useState(false);
+	const [fillerWords, setFillerWords] = useState<readonly string[]>([]);
+	const [lexicon, setLexicon] = useState<readonly string[]>([]);
 	const [message, setMessage] = useState("");
+	const [shortcut, setShortcut] = useState<ShortcutParts>({
+		key: "",
+		modifiers: [],
+	});
+	const [typingSpeed, setTypingSpeed] = useState("");
 	const [uiLocale, setUiLocaleState] = useState<UiLocale>("en");
 	const [translationSourceLanguage, setTranslationSourceLanguage] =
 		useState("uk");
 	const [translationTargetLanguage, setTranslationTargetLanguage] =
 		useState("en");
-	const [typingStartedAt, setTypingStartedAt] = useState<number | null>(null);
-	const [typingText, setTypingText] = useState("");
-	const typingInput = useRef<HTMLTextAreaElement>(null);
+	const resetReturnFocus = useRef<HTMLButtonElement>(null);
 
 	const refresh = useCallback(async () => {
 		try {
@@ -264,9 +266,16 @@ export function SettingsPane({
 			setSnapshot(next);
 			setAnnounceLiveTranscript(next.settings.announceLiveTranscript);
 			setCleanupEnabled(next.settings.textCleanupEnabled);
-			setDictationShortcut(next.settings.dictationShortcut);
-			setFillerWords(next.settings.fillerWords.join("\n"));
-			setLexicon(next.settings.protectedLexicon.join("\n"));
+			setShortcut(parseShortcut(next.settings.dictationShortcut));
+			setFillerWords(next.settings.fillerWords);
+			setLexicon(next.settings.protectedLexicon);
+			setTypingSpeed(
+				String(
+					Math.round(
+						next.settings.typingSpeedWordsPerMinute ?? DEFAULT_TYPING_SPEED_WPM,
+					),
+				),
+			);
 			setUiLocaleState(next.settings.uiLocale);
 			setTranslationSourceLanguage(next.settings.translationSourceLanguage);
 			setTranslationTargetLanguage(next.settings.translationTargetLanguage);
@@ -280,19 +289,17 @@ export function SettingsPane({
 		void refresh();
 	}, [refresh, revision]);
 
-	useEffect(() => {
-		if (typingStartedAt !== null) typingInput.current?.focus();
-	}, [typingStartedAt]);
-
 	async function saveCleanup(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
 		try {
 			const settings = await updateWorkspaceSettings({
-				fillerWords: terms(fillerWords),
-				protectedLexicon: terms(lexicon),
+				fillerWords,
+				protectedLexicon: lexicon,
 				textCleanupEnabled: cleanupEnabled,
 			});
 			setSnapshot((current) => (current ? { ...current, settings } : current));
+			setFillerWords(settings.fillerWords);
+			setLexicon(settings.protectedLexicon);
 			setMessage(t("settings.cleanupSaved"));
 			onSettingsChanged();
 		} catch (error) {
@@ -329,20 +336,20 @@ export function SettingsPane({
 
 	async function saveShortcut(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
-		const shortcut = normalizeShortcut(dictationShortcut);
-		if (!shortcut) {
+		const chord = composeShortcut(shortcut);
+		if (!chord) {
 			setMessage(t("settings.invalidShortcut"));
 			return;
 		}
-		if (isReservedShortcut(shortcut)) {
-			setMessage(t("settings.reservedShortcut", { shortcut }));
+		if (isReservedShortcut(chord)) {
+			setMessage(t("settings.reservedShortcut", { shortcut: chord }));
 			return;
 		}
 		try {
 			const settings = await updateWorkspaceSettings({
-				dictationShortcut: shortcut,
+				dictationShortcut: chord,
 			});
-			setDictationShortcut(settings.dictationShortcut);
+			setShortcut(parseShortcut(settings.dictationShortcut));
 			setSnapshot((current) => (current ? { ...current, settings } : current));
 			setMessage(
 				t("settings.shortcutSaved", { shortcut: settings.dictationShortcut }),
@@ -377,7 +384,8 @@ export function SettingsPane({
 			setSnapshot((current) => (current ? { ...current, settings } : current));
 			setUiLocaleState(settings.uiLocale);
 			await setUiLocale(settings.uiLocale);
-			setMessage(t("settings.interfaceLanguageSaved"));
+			// `t` from this render still speaks the old language; confirm in the new one.
+			setMessage(i18n.t("settings.interfaceLanguageSaved"));
 			onSettingsChanged();
 		} catch (error) {
 			setMessage(errorMessage(error, t));
@@ -399,32 +407,48 @@ export function SettingsPane({
 		}
 	}
 
-	function startTypingTest() {
-		setTypingText("");
-		setTypingStartedAt(performance.now());
-		setMessage(t("settings.typingStart"));
-	}
-
-	async function finishTypingTest() {
-		if (typingStartedAt === null) return;
-		const words = wordCount(typingText);
-		const elapsedSeconds = (performance.now() - typingStartedAt) / 1_000;
-		if (!words || elapsedSeconds <= 0) {
-			setMessage(t("settings.typingNeedsWords"));
+	async function saveTypingSpeed(event: FormEvent<HTMLFormElement>) {
+		event.preventDefault();
+		const wordsPerMinute = Number(typingSpeed);
+		if (
+			!Number.isFinite(wordsPerMinute) ||
+			wordsPerMinute < 1 ||
+			wordsPerMinute > MAX_TYPING_SPEED_WPM
+		) {
+			setMessage(
+				t("settings.invalidTypingSpeed", { max: MAX_TYPING_SPEED_WPM }),
+			);
 			return;
 		}
 		try {
-			const settings = await updateWorkspaceSettings({
-				typingSpeedWordsPerMinute: (words * 60) / elapsedSeconds,
+			await updateWorkspaceSettings({
+				typingSpeedWordsPerMinute: Math.round(wordsPerMinute),
 			});
-			setSnapshot((current) => (current ? { ...current, settings } : current));
-			setTypingStartedAt(null);
 			await refresh();
 			onSettingsChanged();
-			setMessage(t("settings.typingSaved"));
+			setMessage(t("settings.typingSpeedSaved"));
 		} catch (error) {
 			setMessage(errorMessage(error, t));
 		}
+	}
+
+	async function resetSettings() {
+		setConfirmingReset(false);
+		try {
+			const settings = await updateWorkspaceSettings(resettableSettings);
+			await setUiLocale(settings.uiLocale);
+			await refresh();
+			onSettingsChanged();
+			setMessage(i18n.t("settings.resetDone"));
+		} catch (error) {
+			setMessage(errorMessage(error, i18n.t.bind(i18n)));
+		}
+		queueMicrotask(() => resetReturnFocus.current?.focus());
+	}
+
+	function cancelReset() {
+		setConfirmingReset(false);
+		queueMicrotask(() => resetReturnFocus.current?.focus());
 	}
 
 	if (!snapshot) {
@@ -436,10 +460,25 @@ export function SettingsPane({
 		<section aria-labelledby="settings-title" className="settings">
 			<header>
 				<h2 id="settings-title">{t("settings.title")}</h2>
-				<button onClick={() => void refresh()} type="button">
-					{t("settings.refresh")}
+				<button
+					className="secondary"
+					onClick={() => setConfirmingReset(true)}
+					ref={resetReturnFocus}
+					type="button"
+				>
+					{t("settings.reset")}
 				</button>
 			</header>
+			{confirmingReset ? (
+				<ConfirmDialog
+					body={t("settings.resetConfirm.body")}
+					cancelLabel={t("settings.resetConfirm.cancel")}
+					confirmLabel={t("settings.resetConfirm.confirm")}
+					onCancel={cancelReset}
+					onConfirm={() => void resetSettings()}
+					title={t("settings.resetConfirm.title")}
+				/>
+			) : null}
 
 			<section aria-labelledby="cleanup-title" className="settings-section">
 				<h3 id="cleanup-title">{t("settings.cleanupTitle")}</h3>
@@ -453,22 +492,22 @@ export function SettingsPane({
 						/>
 						{t("settings.enableCleanup")}
 					</label>
-					<label htmlFor="filler-words">
-						{t("settings.fillerWords")}
-						<textarea
-							id="filler-words"
-							onChange={(event) => setFillerWords(event.target.value)}
-							value={fillerWords}
-						/>
-					</label>
-					<label htmlFor="protected-lexicon">
-						{t("settings.protectedLexicon")}
-						<textarea
-							id="protected-lexicon"
-							onChange={(event) => setLexicon(event.target.value)}
-							value={lexicon}
-						/>
-					</label>
+					<TermListInput
+						hint={t("settings.fillerWordsHint")}
+						id="filler-words"
+						label={t("settings.fillerWords")}
+						onChange={setFillerWords}
+						placeholder={t("settings.fillerWordsPlaceholder")}
+						terms={fillerWords}
+					/>
+					<TermListInput
+						hint={t("settings.protectedLexiconHint")}
+						id="protected-lexicon"
+						label={t("settings.protectedLexicon")}
+						onChange={setLexicon}
+						placeholder={t("settings.protectedLexiconPlaceholder")}
+						terms={lexicon}
+					/>
 					<button type="submit">{t("settings.saveCleanup")}</button>
 				</form>
 			</section>
@@ -529,16 +568,7 @@ export function SettingsPane({
 			<section aria-labelledby="shortcut-title" className="settings-section">
 				<h3 id="shortcut-title">{t("settings.shortcutTitle")}</h3>
 				<form onSubmit={saveShortcut}>
-					<label htmlFor="dictation-shortcut">
-						{t("settings.toggleDictation")}
-						<input
-							aria-describedby="dictation-shortcut-help"
-							id="dictation-shortcut"
-							onChange={(event) => setDictationShortcut(event.target.value)}
-							value={dictationShortcut}
-						/>
-					</label>
-					<p id="dictation-shortcut-help">{t("settings.shortcutHelp")}</p>
+					<ShortcutField onChange={setShortcut} value={shortcut} />
 					<button type="submit">{t("settings.saveShortcut")}</button>
 				</form>
 			</section>
@@ -624,56 +654,45 @@ export function SettingsPane({
 						duration: formatDuration(stats.dictationDurationSeconds),
 					})}
 				</p>
-				<p>
-					{stats.timeSavedSeconds === null
-						? t("settings.timeSavedNeedsSpeed")
-						: stats.timeSavedSeconds >= 0
+				{stats.timeSavedSeconds === null ? null : (
+					<p>
+						{stats.timeSavedSeconds >= 0
 							? t("settings.timeSaved", {
-									duration: formatDuration(Math.abs(stats.timeSavedSeconds)),
+									duration: formatDuration(stats.timeSavedSeconds),
 								})
 							: t("settings.slowerThanTyping", {
-									duration: formatDuration(Math.abs(stats.timeSavedSeconds)),
+									duration: formatDuration(stats.timeSavedSeconds),
 								})}
-				</p>
-				{settings.typingSpeedWordsPerMinute === null ? null : (
-					<p>
-						{t("settings.measuredSpeed", {
-							speed: Math.round(settings.typingSpeedWordsPerMinute),
-						})}
 					</p>
 				)}
-				<p>{t("settings.typingPrompt")}</p>
-				<blockquote>{t("settings.calibrationText")}</blockquote>
-				{typingStartedAt === null ? (
-					<button onClick={startTypingTest} type="button">
-						{t("settings.startTypingTest")}
-					</button>
-				) : (
-					<>
-						<label htmlFor="typing-test-text">
-							{t("settings.typingTestText")}
-							<textarea
-								id="typing-test-text"
-								onChange={(event) => setTypingText(event.target.value)}
-								ref={typingInput}
-								value={typingText}
-							/>
-						</label>
-						<button onClick={() => void finishTypingTest()} type="button">
-							{t("settings.saveMeasuredSpeed")}
-						</button>
-					</>
-				)}
+				<form onSubmit={saveTypingSpeed}>
+					<label htmlFor="typing-speed">
+						{t("settings.typingSpeed")}
+						<input
+							aria-describedby="typing-speed-hint"
+							id="typing-speed"
+							inputMode="numeric"
+							max={MAX_TYPING_SPEED_WPM}
+							min={1}
+							onChange={(event) => setTypingSpeed(event.target.value)}
+							step={1}
+							type="number"
+							value={typingSpeed}
+						/>
+					</label>
+					<p className="hint" id="typing-speed-hint">
+						{t("settings.typingSpeedHint", {
+							average: DEFAULT_TYPING_SPEED_WPM,
+						})}
+					</p>
+					<button type="submit">{t("settings.saveTypingSpeed")}</button>
+				</form>
 			</section>
 
 			<section aria-labelledby="storage-title" className="settings-section">
 				<h3 id="storage-title">{t("settings.storageTitle")}</h3>
-				<p>{t("settings.dataDirectory", { path: storage.dataDir })}</p>
 				<p>
 					{t("settings.usesDisk", { size: formatBytes(storage.usedBytes) })}
-				</p>
-				<p>
-					{t("settings.freeDisk", { size: formatBytes(storage.freeBytes) })}
 				</p>
 				<a href="/bff/library/export">{t("settings.downloadExport")}</a>
 			</section>
