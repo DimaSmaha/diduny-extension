@@ -22,10 +22,6 @@ export default defineConfig({
 		side_panel: {
 			default_path: "sidepanel/index.html",
 		},
-		options_ui: {
-			open_in_tab: true,
-			page: "options/index.html",
-		},
 		commands: {
 			"toggle-recording": {
 				suggested_key: {
