@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { onMessage } from "../../../lib/messaging/bridge";
+import type { AudioSource } from "../../../lib/messaging/types";
+import { appendTranscript, beginDictation } from "../../../web/src/dictation";
 
 const STORAGE_KEY = "diduny_transcripts";
 const stripTags = (s: string) => s.replace(/<\/?(?:end|fin|eos)>/gi, "");
@@ -29,6 +31,8 @@ export function useTranscript() {
 	const [history, setHistory] = useState<SavedTranscript[]>([]);
 	const micRef = useRef(mic);
 	const tabRef = useRef(tab);
+	// Sources that have not written anything since the current recording started.
+	const awaitingText = useRef(new Set<AudioSource>());
 	micRef.current = mic;
 	tabRef.current = tab;
 
@@ -41,6 +45,10 @@ export function useTranscript() {
 
 	useEffect(() => {
 		return onMessage((msg) => {
+			if (msg.type === "recording-state-changed" && msg.state === "starting") {
+				awaitingText.current = new Set(["mic", "tab"]);
+			}
+
 			if (msg.type === "realtime-tokens") {
 				const setter = msg.source === "tab" ? setTab : setMic;
 				let finalChunk = "";
@@ -52,16 +60,25 @@ export function useTranscript() {
 						interim += stripTags(t.text);
 					}
 				}
+				// Each recording starts below a --- line, as in the web app.
+				const opensDictation =
+					finalChunk.trim() !== "" && awaitingText.current.delete(msg.source);
 				setter((prev) => ({
-					finalText: finalChunk ? prev.finalText + finalChunk : prev.finalText,
+					finalText: opensDictation
+						? beginDictation(prev.finalText, finalChunk)
+						: prev.finalText + finalChunk,
 					interimText: interim,
 				}));
 			}
 
 			if (msg.type === "transcription-complete") {
 				const setter = msg.source === "tab" ? setTab : setMic;
+				// The final upload only fills in when nothing streamed during this recording.
+				const streamedNothing = awaitingText.current.delete(msg.source);
 				setter((prev) => ({
-					finalText: prev.finalText || stripTags(msg.text),
+					finalText: streamedNothing
+						? appendTranscript(prev.finalText, stripTags(msg.text))
+						: prev.finalText,
 					interimText: "",
 				}));
 			}
