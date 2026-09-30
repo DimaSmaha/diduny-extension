@@ -8,7 +8,11 @@ import {
 	releaseCaptureResources,
 	watchForStreamEnd,
 } from "../../lib/audio/capture-resources";
-import { microphoneConstraints } from "../../lib/audio/microphone";
+import {
+	MICROPHONE_BLOCKED_MESSAGE,
+	isMicrophoneBlocked,
+	microphoneConstraints,
+} from "../../lib/audio/microphone";
 import { mixStreams } from "../../lib/audio/mixer";
 import { tabAudioConstraints } from "../../lib/audio/tab-capture";
 import { bffExtensionWebSocketUrl } from "../../lib/bff/client";
@@ -60,10 +64,18 @@ interface AudioPipeline {
 
 let pipelines: AudioPipeline[] = [];
 
+class MicrophoneBlockedError extends Error {}
+
 async function getMicrophoneStream(deviceId: string | null | undefined) {
-	return navigator.mediaDevices.getUserMedia({
-		audio: microphoneConstraints(deviceId ?? null),
-	});
+	try {
+		return await navigator.mediaDevices.getUserMedia({
+			audio: microphoneConstraints(deviceId ?? null),
+		});
+	} catch (error) {
+		if (isMicrophoneBlocked(error))
+			throw new MicrophoneBlockedError(MICROPHONE_BLOCKED_MESSAGE);
+		throw error;
+	}
 }
 
 function messageTokens(tokens: readonly RealtimeToken[]) {
@@ -305,6 +317,9 @@ async function startCapture(msg: StartCapture) {
 		sendMessage({
 			type: "capture-error",
 			error: error instanceof Error ? error.message : "Failed to start capture",
+			...(error instanceof MicrophoneBlockedError
+				? { reason: "microphone-blocked" as const }
+				: {}),
 		});
 	}
 }

@@ -85,6 +85,7 @@ export type CapturePersisted = {
 export type CaptureError = {
 	type: "capture-error";
 	error: string;
+	reason?: "microphone-blocked";
 };
 
 export type Message =

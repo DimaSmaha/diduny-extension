@@ -1,4 +1,7 @@
-import { getDefaultMicrophoneId } from "../lib/audio/microphone";
+import {
+	MIC_GRANTED_STORAGE_KEY,
+	getDefaultMicrophoneId,
+} from "../lib/audio/microphone";
 import { getTabCaptureStreamId } from "../lib/audio/tab-capture";
 /**
  * Background service worker — single entry point per ADR-0005.
@@ -263,6 +266,9 @@ export default defineBackground(() => {
 				break;
 			}
 			case "capture-error": {
+				// The stored grant was stale; the next record click reopens the permission page.
+				if (msg.reason === "microphone-blocked")
+					await chrome.storage.local.remove(MIC_GRANTED_STORAGE_KEY);
 				completedSources.clear();
 				persistedSources.clear();
 				await clearDeliveryStatus();
@@ -563,8 +569,13 @@ export default defineBackground(() => {
 	}
 
 	async function ensureMicPermission(): Promise<void> {
-		const { micGranted } = await chrome.storage.local.get("micGranted");
-		if (micGranted) return;
+		const granted = async () =>
+			Boolean(
+				(await chrome.storage.local.get(MIC_GRANTED_STORAGE_KEY))[
+					MIC_GRANTED_STORAGE_KEY
+				],
+			);
+		if (await granted()) return;
 
 		return new Promise((resolve, reject) => {
 			chrome.tabs.create(
@@ -576,12 +587,19 @@ export default defineBackground(() => {
 					}
 
 					const tabId = tab.id;
+					// The page records the grant itself; closing it proves nothing.
 					const listener = (closedTabId: number) => {
-						if (closedTabId === tabId) {
-							chrome.tabs.onRemoved.removeListener(listener);
-							chrome.storage.local.set({ micGranted: true });
-							resolve();
-						}
+						if (closedTabId !== tabId) return;
+						chrome.tabs.onRemoved.removeListener(listener);
+						granted().then((ok) => {
+							if (ok) resolve();
+							else
+								reject(
+									new Error(
+										"Microphone access was not granted. Click record to try again.",
+									),
+								);
+						}, reject);
 					};
 					chrome.tabs.onRemoved.addListener(listener);
 				},
