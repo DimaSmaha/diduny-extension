@@ -274,6 +274,12 @@ test("loaded extension signs in through the mock proxy BFF, delivers dictation, 
 		await fixture.bringToFront();
 		await fixture.locator("#target").focus();
 		await dictate({ mode: "translation" });
+		// Each recording starts below a --- line in the side panel, as in the web app.
+		await expect
+			.poll(() =>
+				panel.locator(".transcript-text").evaluate((node) => node.textContent),
+			)
+			.toBe("Mock transcript\n---\nMock transcript");
 		const transcription = mock.transcriptions().at(-1);
 		if (!transcription) throw new Error("Expected extension transcription");
 		expect(transcription).toMatchObject({
