@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 import Fastify from "fastify";
 import { chromium } from "playwright";
@@ -37,7 +38,7 @@ test("web dictation cancels safely, uses keyboard and hold controls, and relays 
 	const e2eLibrary = createE2eLibrary();
 	const bff = await buildServer({
 		library: e2eLibrary.library,
-		staticDir: new URL("../web/dist", import.meta.url).pathname,
+		staticDir: fileURLToPath(new URL("../web/dist", import.meta.url)),
 		upstreamUrl: serverUrl(upstream),
 	});
 	await bff.listen({ host: "localhost", port: 0 });
@@ -144,8 +145,14 @@ test("web dictation cancels safely, uses keyboard and hold controls, and relays 
 			.poll(() => page.evaluate(() => navigator.clipboard.readText()))
 			.toBe("Keep this text");
 		await page.getByRole("button", { name: "Copy" }).click();
+		// Windows stores clipboard text with CRLF line endings.
 		await expect
-			.poll(() => page.evaluate(() => navigator.clipboard.readText()))
+			.poll(async () =>
+				(await page.evaluate(() => navigator.clipboard.readText())).replace(
+					/\r\n/g,
+					"\n",
+				),
+			)
 			.toBe("Hello from web dictation\n---\nHello from web dictation");
 	} finally {
 		bff.server.closeAllConnections?.();

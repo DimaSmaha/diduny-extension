@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { AxeBuilder } from "@axe-core/playwright";
 import { type Page, expect, test } from "@playwright/test";
 import Fastify from "fastify";
@@ -36,7 +37,7 @@ test("start page explains delivery, keeps the microphone optional, and persists 
 	const e2eLibrary = createE2eLibrary();
 	const bff = await buildServer({
 		library: e2eLibrary.library,
-		staticDir: new URL("../web/dist", import.meta.url).pathname,
+		staticDir: fileURLToPath(new URL("../web/dist", import.meta.url)),
 		upstreamUrl: serverUrl(upstream),
 	});
 	await bff.listen({ host: "localhost", port: 0 });
@@ -124,7 +125,7 @@ test("start page explains delivery, keeps the microphone optional, and persists 
 
 test("start page does not require microphone access before sign-in", async () => {
 	const bff = await buildServer({
-		staticDir: new URL("../web/dist", import.meta.url).pathname,
+		staticDir: fileURLToPath(new URL("../web/dist", import.meta.url)),
 		upstreamUrl: "http://127.0.0.1:9",
 	});
 	await bff.listen({ host: "localhost", port: 0 });
