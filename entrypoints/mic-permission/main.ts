@@ -7,7 +7,7 @@ function failureMessage(err: unknown) {
 	const name = err instanceof Error ? err.name : "";
 	const message = err instanceof Error ? err.message : "";
 	if (name === "NotAllowedError" && /dismiss/i.test(message))
-		return "The prompt was closed. Click the button again and choose Allow.";
+		return "The prompt was closed. Click the button again and choose Allow while visiting the site.";
 	if (name === "NotAllowedError")
 		return "Microphone is blocked for Diduny. Allow it in Chrome's site settings for this extension, then try again.";
 	if (name === "NotFoundError")
