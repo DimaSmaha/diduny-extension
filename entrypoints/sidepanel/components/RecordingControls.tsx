@@ -197,6 +197,7 @@ export function RecordingControls({
 
 			<button
 				type="button"
+				aria-label={isRecording ? "Stop recording" : "Start recording"}
 				className={`record-btn ${isRecording ? "recording" : ""}`}
 				onClick={onToggleRecording}
 				disabled={!canRecord}
@@ -205,6 +206,11 @@ export function RecordingControls({
 			</button>
 
 			<div className={`state-label ${state}`}>{stateLabels[state]}</div>
+			{canRecord && (
+				<div className="record-hint">
+					{isRecording ? "Click again to stop" : "Click to start"}
+				</div>
+			)}
 
 			{error && <div className="error-msg">{error}</div>}
 		</div>

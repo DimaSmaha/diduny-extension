@@ -213,6 +213,13 @@ body {
 	color: #ef4444;
 }
 
+.record-hint {
+	margin-top: -8px;
+	text-align: center;
+	font-size: 12px;
+	color: #6b7280;
+}
+
 /* Language selector */
 .settings-row {
 	display: flex;
