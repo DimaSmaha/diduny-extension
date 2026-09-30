@@ -22,4 +22,6 @@ test("keeps the BFF local while allowing command-triggered delivery on the activ
 	expect(source).toContain('"start-meeting"');
 	expect(background).toContain("chrome.scripting.executeScript");
 	expect(background).not.toContain("hasDeliveryPermission");
+	// The extension never types into the Diduny web app's own document.
+	expect(background).toContain("new URL(tab.url).origin === bffOrigin");
 });

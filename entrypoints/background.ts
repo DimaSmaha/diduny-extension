@@ -309,7 +309,7 @@ export default defineBackground(() => {
 			persistedSources.clear();
 			await clearDeliveryStatus();
 			const delivery =
-				mode !== "meeting" ? await prepareDeliveryTarget() : undefined;
+				mode !== "meeting" ? await prepareDeliveryTarget(bffOrigin) : undefined;
 			await saveDeliverySession(delivery?.session);
 			if (mode !== "meeting") {
 				await sendMessage({
@@ -372,7 +372,7 @@ export default defineBackground(() => {
 		return getTabCaptureStreamId(chrome.tabCapture, chrome.runtime, tab.id);
 	}
 
-	async function prepareDeliveryTarget(): Promise<{
+	async function prepareDeliveryTarget(bffOrigin: string): Promise<{
 		reason?: DeliveryUnavailableReason;
 		session?: DeliverySession;
 	}> {
@@ -381,6 +381,12 @@ export default defineBackground(() => {
 			lastFocusedWindow: true,
 		});
 		if (!tab?.id || !tab.url) return { reason: "no-text-field" };
+		// Deliberately not synced: the Diduny web app keeps its own dictation
+		// document. Typing the extension's result into it mixed two transcripts
+		// (the panel shows live text, the page got the final upload), so on the
+		// web app's origin the text stays in the side panel only.
+		if (new URL(tab.url).origin === bffOrigin)
+			return { reason: "diduny-web-app" };
 		if (!(await isDeliveryEnabled(tab.url))) return { reason: "site-disabled" };
 
 		try {

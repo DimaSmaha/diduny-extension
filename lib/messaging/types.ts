@@ -41,6 +41,7 @@ export type DeliveryAvailability = {
 	type: "delivery-availability";
 	available: boolean;
 	reason?:
+		| "diduny-web-app"
 		| "no-text-field"
 		| "permission-denied"
 		| "site-disabled"

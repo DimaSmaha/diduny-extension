@@ -24,6 +24,8 @@ export function useRecording() {
 					msg.available
 						? null
 						: {
+								"diduny-web-app":
+									"Diduny does not type into its own web app. The text stays here; copy it if you need it there.",
 								"no-text-field":
 									"Focus a supported text field to insert dictation. Copy the transcript instead.",
 								"permission-denied":
