@@ -1246,12 +1246,15 @@ export function App() {
 					/>
 					{/* While a hold is active only its button stays visible; the others keep their space so it never moves. */}
 					<div className={holding ? "controls holding" : "controls"}>
+						{/* Both labels share one cell, so switching to "Stop" never resizes the button and shifts the hold button. */}
 						<button
+							className="toggle"
 							disabled={captureState === "sending"}
 							onClick={toggleCapture}
 							type="button"
 						>
-							{isRecording ? t("dictation.stop") : t("dictation.start")}
+							<span aria-hidden={isRecording}>{t("dictation.start")}</span>
+							<span aria-hidden={!isRecording}>{t("dictation.stop")}</span>
 						</button>
 						<button
 							aria-pressed={holding}

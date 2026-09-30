@@ -657,6 +657,20 @@ textarea.document {
 	visibility: hidden;
 }
 
+/* Start/Stop labels overlap in one cell, so the button is always as wide as the longer one. */
+button.toggle {
+	display: inline-grid;
+	justify-items: center;
+}
+
+button.toggle > span {
+	grid-area: 1 / 1;
+}
+
+button.toggle > span[aria-hidden="true"] {
+	visibility: hidden;
+}
+
 button.hold {
 	touch-action: none;
 	user-select: none;
