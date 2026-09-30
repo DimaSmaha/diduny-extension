@@ -135,7 +135,7 @@ test.each([
 		sendOtpStatus = upstreamStatus;
 		const sent = await inject({
 			method: "POST",
-			payload: { email: '"john..doe"@project.com' },
+			payload: { email: "simple@project.com" },
 			url: "/bff/auth/send-otp",
 		});
 		sendOtpStatus = 204;

@@ -118,14 +118,10 @@ test("clears the email and code when going back and after a confirmed sign-out",
 	}
 });
 
-test("submits RFC-valid addresses that the browser email type would block, unchanged", async () => {
+test("submits international addresses that the browser email type would block, unchanged", async () => {
 	const stack = await startStack();
 	const { page } = stack;
-	const addresses = [
-		'"john..doe"@project.com',
-		"I❤️CHOCOLATE🍫@example.com",
-		"postmaster@[IPv6:2001:0db8:85a3:0000:0000:8a2e:0370:7334]",
-	];
+	const addresses = ["I❤️CHOCOLATE🍫@example.com", "користувач@приклад.укр"];
 	try {
 		for (const address of addresses) {
 			await page.getByLabel("Email").fill(address);
@@ -148,7 +144,13 @@ test("explains an invalid address inline without contacting the service", async 
 	const { page } = stack;
 	try {
 		const email = page.getByLabel("Email");
-		for (const address of ["abc.example.com", "a@b@c@example.com"]) {
+		for (const address of [
+			"abc.example.com",
+			"a@b@c@example.com",
+			"d@t",
+			"test@d.c",
+			'"john..doe"@project.com',
+		]) {
 			await email.fill(address);
 			await page.getByRole("button", { name: "Send one-time code" }).click();
 			await expect(

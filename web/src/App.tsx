@@ -1053,7 +1053,7 @@ export function App() {
 						</button>
 					</form>
 				) : (
-					// noValidate: the browser's type=email rule is stricter than RFC 5322; isValidEmail decides.
+					// noValidate: the browser's type=email rule refuses international addresses; isValidEmail decides.
 					<form noValidate onSubmit={sendOtp}>
 						<label htmlFor="email">{t("auth.email")}</label>
 						<input
