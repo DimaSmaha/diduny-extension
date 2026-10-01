@@ -76,6 +76,8 @@ export const en = {
 		microphone: {
 			title: "Use your microphone",
 			body: "Diduny needs microphone access before it can transcribe your words.",
+			allowAlways:
+				"When the browser asks, choose “Allow while visiting the site”. “Allow this time” ends when you close this tab, and you'll be asked again next time.",
 			optional:
 				"This is optional now - the browser will also ask when you start your first dictation.",
 			allow: "Allow microphone",

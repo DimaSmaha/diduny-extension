@@ -106,6 +106,27 @@ test("start page explains delivery, keeps the microphone optional, and saves the
 		).toBeVisible();
 		await page.getByLabel("Enable filler-word cleanup").uncheck();
 		await page.getByLabel("Announce final live transcript").check();
+		await expect(
+			page.getByText("choose “Allow while visiting the site”", {
+				exact: false,
+			}),
+		).toBeVisible();
+		await page.getByRole("button", { name: "Continue to sign in" }).click();
+
+		// Reopened from the sign-in screen, the flow keeps the choices and the microphone grant.
+		await page.getByRole("button", { name: "About delivery" }).click();
+		await page.getByRole("button", { name: "Next" }).click();
+		await expect(page.getByLabel("Never save recordings")).toBeChecked();
+		await expect(
+			page.getByLabel("Enable filler-word cleanup"),
+		).not.toBeChecked();
+		await expect(
+			page.getByLabel("Announce final live transcript"),
+		).toBeChecked();
+		await expect(page.getByText("Microphone access is ready.")).toBeVisible();
+		await expect(
+			page.getByRole("button", { name: "Allow microphone" }),
+		).toBeDisabled();
 		await page.getByRole("button", { name: "Continue to sign in" }).click();
 
 		await page.getByLabel("Email").fill("onboarding@example.com");

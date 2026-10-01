@@ -4,6 +4,8 @@ import { AppBar } from "./ThemeToggle";
 import { userErrorMessage } from "./errors";
 import {
 	type OnboardingChoices,
+	type PendingChoices,
+	choicesWithPending,
 	defaultOnboardingChoices,
 } from "./onboarding-choices";
 import {
@@ -155,15 +157,37 @@ function DeliveryFlow({
 	);
 }
 
-/** First-visit page: explains delivery and the engine, then hands off to email sign-in. */
+/**
+ * First-visit page: explains delivery and the engine, then hands off to email sign-in.
+ * Reopened from the sign-in screen, it shows the choices made last time.
+ */
 export function StartPage({
+	initialChoices,
 	onContinue,
 }: {
-	onContinue(choices: OnboardingChoices): void;
+	initialChoices: PendingChoices;
+	onContinue(choices: PendingChoices): void;
 }) {
 	const { t } = useTranslation();
 	const [microphone, setMicrophone] = useState<MicrophoneState>("idle");
-	const [choices, setChoices] = useState(defaultOnboardingChoices);
+	const [pending, setPending] = useState(initialChoices);
+
+	// Show an earlier grant (or block) instead of offering the button again.
+	useEffect(() => {
+		let cancelled = false;
+		navigator.permissions
+			?.query({ name: "microphone" as PermissionName })
+			.then((permission) => {
+				if (cancelled || permission.state === "prompt") return;
+				setMicrophone(permission.state);
+			})
+			.catch(() => {
+				// A browser that can't report the permission keeps the button available.
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
 
 	async function requestMicrophone() {
 		if (!navigator.mediaDevices?.getUserMedia) {
@@ -188,6 +212,7 @@ export function StartPage({
 					<div className="microphone-choice">
 						<h3>{t("onboarding.microphone.title")}</h3>
 						<p>{t("onboarding.microphone.body")}</p>
+						<p>{t("onboarding.microphone.allowAlways")}</p>
 						<p className="note">{t("onboarding.microphone.optional")}</p>
 						<div className="card-actions">
 							<button
@@ -210,12 +235,12 @@ export function StartPage({
 						</div>
 					</div>
 				}
-				choices={choices}
+				choices={choicesWithPending(pending)}
 				finishLabel={t("onboarding.continueToSignIn")}
 				onChoiceChange={(changes) =>
-					setChoices((current) => ({ ...current, ...changes }))
+					setPending((current) => ({ ...current, ...changes }))
 				}
-				onFinish={() => onContinue(choices)}
+				onFinish={() => onContinue(pending)}
 			/>
 		</main>
 	);

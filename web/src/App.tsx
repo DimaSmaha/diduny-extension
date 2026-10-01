@@ -55,11 +55,10 @@ import { createWorkspaceInvalidationBus } from "./invalidation";
 import { dictationLanguages, ownLanguageName } from "./languages";
 import { saveToLibrary } from "./library";
 import {
-	type OnboardingChoices,
-	changesFromDefaults,
-	hasPendingChanges,
-	parseOnboardingChoices,
+	type PendingChoices,
+	parsePendingChoices,
 	pendingChoicesStorageKey,
+	pendingSettingsChanges,
 } from "./onboarding-choices";
 import {
 	copyDocumentStyles,
@@ -414,17 +413,23 @@ export function App() {
 
 	useEffect(() => {
 		if (authState !== "signed-in") return;
-		const choices = parseOnboardingChoices(
+		const pending = parsePendingChoices(
 			localStorage.getItem(pendingChoicesStorageKey),
 		);
-		if (!choices) return;
-		const { retention, settings } = changesFromDefaults(choices);
-		void Promise.all([
-			retention ? updateRetentionPolicy("dictation", retention) : undefined,
-			Object.keys(settings).length > 0
-				? updateWorkspaceSettings(settings)
-				: undefined,
-		])
+		if (Object.keys(pending).length === 0) return;
+		void getWorkspaceSettings()
+			.then(({ retention: current }) => {
+				const { retention, settings } = pendingSettingsChanges(
+					pending,
+					current.dictation,
+				);
+				return Promise.all([
+					retention ? updateRetentionPolicy("dictation", retention) : undefined,
+					Object.keys(settings).length > 0
+						? updateWorkspaceSettings(settings)
+						: undefined,
+				]);
+			})
 			.then(() => {
 				localStorage.removeItem(pendingChoicesStorageKey);
 				invalidateWorkspace();
@@ -1023,9 +1028,9 @@ export function App() {
 		}
 	}
 
-	function completeOnboarding(choices: OnboardingChoices) {
+	function completeOnboarding(choices: PendingChoices) {
 		localStorage.setItem(onboardingCompletedStorageKey, "1");
-		if (hasPendingChanges(choices))
+		if (Object.keys(choices).length > 0)
 			localStorage.setItem(pendingChoicesStorageKey, JSON.stringify(choices));
 		else localStorage.removeItem(pendingChoicesStorageKey);
 		setOnboardingOpen(false);
@@ -1036,7 +1041,14 @@ export function App() {
 	}
 
 	if (onboardingOpen && authState !== "signed-in") {
-		return <StartPage onContinue={completeOnboarding} />;
+		return (
+			<StartPage
+				initialChoices={parsePendingChoices(
+					localStorage.getItem(pendingChoicesStorageKey),
+				)}
+				onContinue={completeOnboarding}
+			/>
+		);
 	}
 
 	if (authState !== "signed-in") {
