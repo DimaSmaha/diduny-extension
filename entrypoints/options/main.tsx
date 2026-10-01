@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { ExtensionThemeToggle } from "../../lib/ExtensionThemeToggle";
 import {
 	getDefaultMicrophoneId,
 	setDefaultMicrophoneId,
@@ -14,6 +15,7 @@ import {
 	getDisabledDeliveryOrigins,
 	setDeliveryEnabled,
 } from "../../lib/delivery/site-settings";
+import { applyStoredTheme } from "../../lib/theme-storage";
 import "./style.css";
 
 type Section = "connection" | "microphone" | "sites";
@@ -119,7 +121,10 @@ function Options() {
 
 	return (
 		<main>
-			<h1>Diduny settings</h1>
+			<div className="page-header">
+				<h1>Diduny settings</h1>
+				<ExtensionThemeToggle />
+			</div>
 			<section>
 				<h2>Connection</h2>
 				<form onSubmit={submit}>
@@ -199,4 +204,6 @@ function Options() {
 }
 
 const root = document.getElementById("root");
-if (root) createRoot(root).render(<Options />);
+// Apply the saved theme first so the page never flashes the wrong one.
+if (root)
+	void applyStoredTheme().then(() => createRoot(root).render(<Options />));

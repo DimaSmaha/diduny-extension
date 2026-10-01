@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test";
 import {
 	applyThemePreference,
+	nextTheme,
 	parseThemePreference,
 	readThemePreference,
+	resolveTheme,
 	saveThemePreference,
 	themeStorageKey,
 } from "./theme";
@@ -38,6 +40,15 @@ test("reads and saves the preference, surviving unavailable storage", () => {
 	};
 	expect(readThemePreference(blocked)).toBe("system");
 	expect(() => saveThemePreference("dark", blocked)).not.toThrow();
+});
+
+test("resolves system through the OS preference and flips between two states", () => {
+	expect(resolveTheme("system", true)).toBe("dark");
+	expect(resolveTheme("system", false)).toBe("light");
+	expect(resolveTheme("light", true)).toBe("light");
+	expect(resolveTheme("dark", false)).toBe("dark");
+	expect(nextTheme("dark")).toBe("light");
+	expect(nextTheme("light")).toBe("dark");
 });
 
 test("sets data-theme for explicit choices and clears it for system", () => {

@@ -170,36 +170,39 @@ test("explains an invalid address inline without contacting the service", async 
 	}
 });
 
-test("theme switcher follows the OS by default, persists a choice, and passes axe in dark mode", async () => {
+test("theme toggle follows the OS by default, persists a choice, and passes axe in dark mode", async () => {
 	const stack = await startStack();
 	const { page } = stack;
 	const root = page.locator("html");
 	const background = () =>
 		page.evaluate(() => getComputedStyle(document.body).backgroundColor);
 	try {
-		const theme = page.getByLabel("Theme");
-		await expect(theme).toHaveValue("system");
+		const toLight = page.getByRole("button", { name: "Switch to light theme" });
+		const toDark = page.getByRole("button", { name: "Switch to dark theme" });
+		await expect(toDark).toHaveAttribute("aria-pressed", "false");
 		await expect(root).not.toHaveAttribute("data-theme");
 
 		await page.emulateMedia({ colorScheme: "dark" });
 		expect(await background()).toBe("rgb(22, 21, 20)");
 		await expectNoAxeViolations(page);
 
-		await theme.selectOption("light");
+		await page.reload();
+		await toLight.click();
 		await expect(root).toHaveAttribute("data-theme", "light");
 		expect(await background()).toBe("rgb(246, 243, 238)");
 
-		await theme.selectOption("dark");
+		await toDark.click();
 		await page.emulateMedia({ colorScheme: "light" });
 		await page.reload();
 		await expect(root).toHaveAttribute("data-theme", "dark");
-		await expect(page.getByLabel("Theme")).toHaveValue("dark");
+		await expect(toLight).toHaveAttribute("aria-pressed", "true");
 		expect(await background()).toBe("rgb(22, 21, 20)");
 
 		await signIn(page, "theme@example.com");
-		await expect(page.getByLabel("Theme")).toHaveValue("dark");
+		await expect(toLight).toBeVisible();
 		await expectNoAxeViolations(page);
 		await page.getByRole("button", { name: "About delivery" }).click();
+		await expect(toLight).toBeVisible();
 		await expectNoAxeViolations(page);
 		await page.getByRole("button", { name: "Sign out" }).click();
 		await expectNoAxeViolations(page);

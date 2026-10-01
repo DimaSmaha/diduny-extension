@@ -24,7 +24,7 @@ async function expectNoAxeViolations(page: Page) {
 	expect(results.violations).toEqual([]);
 }
 
-test("start page explains delivery, keeps the microphone optional, and persists never-save after sign-in", async () => {
+test("start page explains delivery, keeps the microphone optional, and saves the settings checkboxes after sign-in", async () => {
 	const upstream = Fastify();
 	upstream.post("/api/v1/auth/send-otp", async () => ({}));
 	upstream.post("/api/v1/auth/verify-otp", async () => ({
@@ -68,19 +68,35 @@ test("start page explains delivery, keeps the microphone optional, and persists 
 				exact: false,
 			}),
 		).toBeVisible();
+		await expect(page.getByText("Step 1 of 2")).toBeVisible();
+		await expect(page.getByLabel("Never save recordings")).toHaveCount(0);
+		await expect(page.getByLabel("Email")).toHaveCount(0);
+		await expectNoAxeViolations(page);
+
+		await page.getByRole("button", { name: "Next" }).click();
+		await expect(page.getByText("Step 2 of 2")).toBeVisible();
 		await expect(
 			page.getByRole("heading", {
 				name: "Which engine transcribes your voice",
 			}),
-		).toBeVisible();
+		).toBeFocused();
 		await expect(
 			page.getByText("more accurate and handles accents", { exact: false }),
 		).toBeVisible();
 		await expect(
 			page.getByRole("heading", { name: "Use your microphone" }),
 		).toBeVisible();
-		await expect(page.getByLabel("Email")).toHaveCount(0);
+		await expect(page.getByLabel("Enable filler-word cleanup")).toBeChecked();
+		await expect(
+			page.getByLabel("Announce final live transcript"),
+		).not.toBeChecked();
 		await expectNoAxeViolations(page);
+
+		await page.getByRole("button", { name: "Back" }).click();
+		await expect(
+			page.getByRole("heading", { name: "Where your words end up" }),
+		).toBeFocused();
+		await page.getByRole("button", { name: "Next" }).click();
 
 		await page.getByRole("button", { name: "Allow microphone" }).click();
 		await expect(page.getByText("Microphone access is ready.")).toBeVisible();
@@ -88,6 +104,8 @@ test("start page explains delivery, keeps the microphone optional, and persists 
 		await expect(
 			page.getByText("audio is buffered in a temporary file", { exact: false }),
 		).toBeVisible();
+		await page.getByLabel("Enable filler-word cleanup").uncheck();
+		await page.getByLabel("Announce final live transcript").check();
 		await page.getByRole("button", { name: "Continue to sign in" }).click();
 
 		await page.getByLabel("Email").fill("onboarding@example.com");
@@ -95,6 +113,12 @@ test("start page explains delivery, keeps the microphone optional, and persists 
 		await page.getByLabel("One-time code").fill("123456");
 		await page.getByRole("button", { name: "Sign in", exact: true }).click();
 		await expect.poll(() => e2eLibrary.retention().dictation).toBe("never");
+		await expect
+			.poll(() => e2eLibrary.settings().textCleanupEnabled)
+			.toBe(false);
+		await expect
+			.poll(() => e2eLibrary.settings().announceLiveTranscript)
+			.toBe(true);
 
 		const document = page.getByLabel("Dictation document");
 		await document.fill("Keep this draft while reviewing delivery.");
@@ -104,10 +128,24 @@ test("start page explains delivery, keeps the microphone optional, and persists 
 			page.getByRole("heading", { name: "Where your words end up" }),
 		).toBeFocused();
 		await expect(aboutDelivery).toHaveAttribute("aria-current", "page");
-		await expect(page.getByLabel("Never save recordings")).toHaveCount(0);
+		await expectNoAxeViolations(page);
+		await page.getByRole("button", { name: "Next" }).click();
+
+		// The checkboxes show the saved settings and save the moment they change.
+		const neverSave = page.getByLabel("Never save recordings");
+		const cleanup = page.getByLabel("Enable filler-word cleanup");
+		await expect(neverSave).toBeChecked();
+		await expect(cleanup).not.toBeChecked();
 		await expect(
 			page.getByRole("button", { name: "Continue to sign in" }),
 		).toHaveCount(0);
+		await neverSave.uncheck();
+		await expect(page.getByText("Saved.")).toBeVisible();
+		expect(e2eLibrary.retention().dictation).toBe("forever");
+		await cleanup.check();
+		await expect
+			.poll(() => e2eLibrary.settings().textCleanupEnabled)
+			.toBe(true);
 		await expectNoAxeViolations(page);
 		await page.getByRole("button", { name: "Back to dictation" }).click();
 		await expect(aboutDelivery).toBeFocused();
@@ -141,6 +179,7 @@ test("start page does not require microphone access before sign-in", async () =>
 
 	try {
 		await page.goto(`${serverUrl(bff)}/`);
+		await page.getByRole("button", { name: "Next" }).click();
 		await page.getByRole("button", { name: "Continue to sign in" }).click();
 		await expect(page.getByLabel("Email")).toBeVisible();
 		await page.reload();

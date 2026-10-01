@@ -41,6 +41,29 @@ export function saveThemePreference(
 	}
 }
 
+export type ResolvedTheme = "light" | "dark";
+
+/** "system" resolves through the OS preference; an explicit choice wins. */
+export function resolveTheme(
+	preference: ThemePreference,
+	prefersDark: boolean,
+): ResolvedTheme {
+	if (preference === "system") return prefersDark ? "dark" : "light";
+	return preference;
+}
+
+export function nextTheme(current: ResolvedTheme): ResolvedTheme {
+	return current === "dark" ? "light" : "dark";
+}
+
+export function systemPrefersDark(): boolean {
+	try {
+		return matchMedia("(prefers-color-scheme: dark)").matches;
+	} catch {
+		return false;
+	}
+}
+
 /** "system" leaves the attribute off so the prefers-color-scheme media query decides. */
 export function applyThemePreference(
 	preference: ThemePreference,

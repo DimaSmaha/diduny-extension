@@ -14,7 +14,6 @@ import {
 	normalizeEmail,
 } from "../../src/core/auth-validation";
 import { AUDIO_FORMAT, WEB_LATENCY_TARGET_MS } from "../../src/core/constants";
-import type { RetentionPolicy } from "../../src/core/ports";
 import type { RealtimeToken } from "../../src/core/realtime-session";
 import { DEFAULT_SETTINGS } from "../../src/core/settings";
 import { createSpeechPreCheckAccumulator } from "../../src/core/speech-precheck";
@@ -25,10 +24,9 @@ import {
 	AboutDelivery,
 	StartPage,
 	onboardingCompletedStorageKey,
-	pendingRetentionStorageKey,
 } from "./Onboarding";
 import { SettingsPane, type SettingsSection } from "./SettingsPane";
-import { AppBar, ThemeSwitcher } from "./ThemeSwitcher";
+import { AppBar, ThemeToggle } from "./ThemeToggle";
 import {
 	audioCaptureConstraints,
 	savedMicrophoneUnavailable,
@@ -56,6 +54,13 @@ import i18n, { setUiLocale } from "./i18n";
 import { createWorkspaceInvalidationBus } from "./invalidation";
 import { dictationLanguages, ownLanguageName } from "./languages";
 import { saveToLibrary } from "./library";
+import {
+	type OnboardingChoices,
+	changesFromDefaults,
+	hasPendingChanges,
+	parseOnboardingChoices,
+	pendingChoicesStorageKey,
+} from "./onboarding-choices";
 import {
 	copyDocumentStyles,
 	documentPictureInPictureApi,
@@ -409,15 +414,23 @@ export function App() {
 
 	useEffect(() => {
 		if (authState !== "signed-in") return;
-		const policy = localStorage.getItem(pendingRetentionStorageKey);
-		if (policy !== "never") return;
-		void updateRetentionPolicy("dictation", "never")
+		const choices = parseOnboardingChoices(
+			localStorage.getItem(pendingChoicesStorageKey),
+		);
+		if (!choices) return;
+		const { retention, settings } = changesFromDefaults(choices);
+		void Promise.all([
+			retention ? updateRetentionPolicy("dictation", retention) : undefined,
+			Object.keys(settings).length > 0
+				? updateWorkspaceSettings(settings)
+				: undefined,
+		])
 			.then(() => {
-				localStorage.removeItem(pendingRetentionStorageKey);
+				localStorage.removeItem(pendingChoicesStorageKey);
 				invalidateWorkspace();
 			})
 			.catch(() => {
-				// Keep the preference for the next authenticated session.
+				// Keep the choices for the next authenticated session.
 			});
 	}, [authState, invalidateWorkspace]);
 
@@ -1010,11 +1023,11 @@ export function App() {
 		}
 	}
 
-	function completeOnboarding(retention: RetentionPolicy) {
+	function completeOnboarding(choices: OnboardingChoices) {
 		localStorage.setItem(onboardingCompletedStorageKey, "1");
-		if (retention === "never")
-			localStorage.setItem(pendingRetentionStorageKey, retention);
-		else localStorage.removeItem(pendingRetentionStorageKey);
+		if (hasPendingChanges(choices))
+			localStorage.setItem(pendingChoicesStorageKey, JSON.stringify(choices));
+		else localStorage.removeItem(pendingChoicesStorageKey);
 		setOnboardingOpen(false);
 	}
 
@@ -1147,7 +1160,7 @@ export function App() {
 					>
 						{t("app.nav.signOut")}
 					</button>
-					<ThemeSwitcher />
+					<ThemeToggle />
 				</div>
 			</header>
 			{confirmingSignOut ? (
@@ -1164,7 +1177,10 @@ export function App() {
 				<CommandPalette onClose={closeCommandPalette} onCopied={setStatus} />
 			) : null}
 			{view === "about" ? (
-				<AboutDelivery onBack={closeAboutDelivery} />
+				<AboutDelivery
+					onBack={closeAboutDelivery}
+					onSettingsChanged={invalidateWorkspace}
+				/>
 			) : view === "library" ? (
 				<LibraryPane
 					onLibraryChanged={broadcastWorkspaceChange}

@@ -1,3 +1,4 @@
+import { ExtensionThemeToggle } from "../../lib/ExtensionThemeToggle";
 import { AuthScreen } from "./components/AuthScreen";
 import { MeetingTranscriptView } from "./components/MeetingTranscriptView";
 import { RecordingControls } from "./components/RecordingControls";
@@ -13,17 +14,25 @@ export function App() {
 
 	if (auth.step !== "authenticated") {
 		return (
-			<AuthScreen
-				loading={auth.loading}
-				error={auth.error}
-				onOpenSignIn={() => void auth.openBffSignIn()}
-				onRefresh={() => void auth.refresh()}
-			/>
+			<>
+				<div className="topbar">
+					<ExtensionThemeToggle />
+				</div>
+				<AuthScreen
+					loading={auth.loading}
+					error={auth.error}
+					onOpenSignIn={() => void auth.openBffSignIn()}
+					onRefresh={() => void auth.refresh()}
+				/>
+			</>
 		);
 	}
 
 	return (
 		<>
+			<div className="topbar">
+				<ExtensionThemeToggle />
+			</div>
 			<RecordingControls
 				state={recording.state}
 				mode={recording.mode}

@@ -56,10 +56,8 @@ export const en = {
 		},
 	},
 	theme: {
-		label: "Theme",
-		system: "System",
-		light: "Light",
-		dark: "Dark",
+		toggleToDark: "Switch to dark theme",
+		toggleToLight: "Switch to light theme",
 	},
 	about: {
 		back: "Back to dictation",
@@ -67,6 +65,14 @@ export const en = {
 	onboarding: {
 		intro: "Before you sign in, here's how Diduny works.",
 		continueToSignIn: "Continue to sign in",
+		step: "Step {current} of {total}",
+		next: "Next",
+		back: "Back",
+		saved: "Saved.",
+		choices: {
+			cleanup: "Enable filler-word cleanup",
+			announce: "Announce final live transcript",
+		},
 		microphone: {
 			title: "Use your microphone",
 			body: "Diduny needs microphone access before it can transcribe your words.",

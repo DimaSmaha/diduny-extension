@@ -55,10 +55,8 @@ export const uk = {
 		},
 	},
 	theme: {
-		label: "Тема",
-		system: "Як у системі",
-		light: "Світла",
-		dark: "Темна",
+		toggleToDark: "Увімкнути темну тему",
+		toggleToLight: "Увімкнути світлу тему",
 	},
 	about: {
 		back: "Назад до диктування",
@@ -66,6 +64,14 @@ export const uk = {
 	onboarding: {
 		intro: "Перш ніж увійти, дізнайтеся, як працює Diduny.",
 		continueToSignIn: "Продовжити до входу",
+		step: "Крок {current} з {total}",
+		next: "Далі",
+		back: "Назад",
+		saved: "Збережено.",
+		choices: {
+			cleanup: "Увімкнути видалення слів-паразитів",
+			announce: "Озвучувати фінальний поточний текст",
+		},
 		microphone: {
 			title: "Використайте мікрофон",
 			body: "Diduny потрібен доступ до мікрофона, перш ніж він зможе розпізнавати ваші слова.",

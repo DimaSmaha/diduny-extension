@@ -158,15 +158,13 @@ a:focus-visible {
 	margin: 0;
 }
 
-.theme-switcher {
-	display: flex;
+button.theme-toggle {
+	display: inline-flex;
 	align-items: center;
-	gap: 0.5rem;
-	font-weight: 600;
-}
-
-.theme-switcher select {
-	width: auto;
+	justify-content: center;
+	width: 44px;
+	padding: 0;
+	border-radius: 50%;
 }
 
 .start {
@@ -217,6 +215,28 @@ a:focus-visible {
 
 .about {
 	max-width: 44rem;
+}
+
+.flow {
+	max-width: 44rem;
+}
+
+.flow .note:first-child {
+	font-size: 0.9rem;
+}
+
+.flow h3 {
+	margin: 0;
+	font-size: 1.05rem;
+}
+
+.microphone-choice {
+	display: grid;
+	gap: 0.6rem;
+}
+
+.microphone-choice p {
+	margin: 0;
 }
 
 label.checkbox {
@@ -282,10 +302,6 @@ label.checkbox input {
 	display: grid;
 	gap: 0.35rem;
 	font-weight: 600;
-}
-
-.auth .theme-switcher {
-	display: flex;
 }
 
 .workspace header,
