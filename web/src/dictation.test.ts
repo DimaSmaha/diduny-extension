@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import {
 	COMMAND_PALETTE_SHORTCUT,
 	appendTranscript,
-	beginDictation,
 	isReservedShortcut,
 } from "./dictation";
 
@@ -12,15 +11,6 @@ test("appends each completed dictation below a --- line without replacing the do
 	expect(appendTranscript("first", "second")).toBe("first\n---\nsecond");
 	expect(appendTranscript("first \n", "second")).toBe("first\n---\nsecond");
 	expect(appendTranscript("first", "  ")).toBe("first");
-});
-
-test("starts a streamed dictation below a --- line and keeps the chunk's trailing space", () => {
-	expect(beginDictation("", " Hello ")).toBe("Hello ");
-	expect(beginDictation("first ", "Hello ")).toBe("first\n---\nHello ");
-	// Later chunks are concatenated by the caller, so words stay spaced.
-	expect(`${beginDictation("first", "Hello ")}world`).toBe(
-		"first\n---\nHello world",
-	);
 });
 
 test("refuses browser-reserved keyboard chords", () => {

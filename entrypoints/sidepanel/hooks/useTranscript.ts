@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { onMessage } from "../../../lib/messaging/bridge";
-import type { AudioSource } from "../../../lib/messaging/types";
-import { appendTranscript, beginDictation } from "../../../web/src/dictation";
+import { appendTranscript } from "../../../web/src/dictation";
 
 const STORAGE_KEY = "diduny_transcripts";
 const stripTags = (s: string) => s.replace(/<\/?(?:end|fin|eos)>/gi, "");
@@ -13,26 +12,33 @@ interface SavedTranscript {
 	timestamp: number;
 }
 
-interface SourceState {
+export interface SourceState {
+	/** Finished results plus the user's edits; streamed tokens never land here. */
 	finalText: string;
-	interimText: string;
+	/** What the current recording has streamed so far, shown in the live box. */
+	liveFinal: string;
+	liveProvisional: string;
 }
 
+const EMPTY_SOURCE: SourceState = {
+	finalText: "",
+	liveFinal: "",
+	liveProvisional: "",
+};
+
+const withoutLive = (prev: SourceState): SourceState => ({
+	...prev,
+	liveFinal: "",
+	liveProvisional: "",
+});
+
 export function useTranscript() {
-	const [mic, setMic] = useState<SourceState>({
-		finalText: "",
-		interimText: "",
-	});
-	const [tab, setTab] = useState<SourceState>({
-		finalText: "",
-		interimText: "",
-	});
+	const [mic, setMic] = useState<SourceState>(EMPTY_SOURCE);
+	const [tab, setTab] = useState<SourceState>(EMPTY_SOURCE);
 	const [copied, setCopied] = useState(false);
 	const [history, setHistory] = useState<SavedTranscript[]>([]);
 	const micRef = useRef(mic);
 	const tabRef = useRef(tab);
-	// Sources that have not written anything since the current recording started.
-	const awaitingText = useRef(new Set<AudioSource>());
 	micRef.current = mic;
 	tabRef.current = tab;
 
@@ -45,41 +51,41 @@ export function useTranscript() {
 
 	useEffect(() => {
 		return onMessage((msg) => {
-			if (msg.type === "recording-state-changed" && msg.state === "starting") {
-				awaitingText.current = new Set(["mic", "tab"]);
+			if (
+				msg.type === "recording-state-changed" &&
+				(msg.state === "starting" ||
+					msg.state === "idle" ||
+					msg.state === "error")
+			) {
+				setMic(withoutLive);
+				setTab(withoutLive);
 			}
 
 			if (msg.type === "realtime-tokens") {
 				const setter = msg.source === "tab" ? setTab : setMic;
 				let finalChunk = "";
-				let interim = "";
+				let provisional = "";
 				for (const t of msg.tokens) {
 					if (t.is_final) {
 						finalChunk += stripTags(t.text);
 					} else {
-						interim += stripTags(t.text);
+						provisional += stripTags(t.text);
 					}
 				}
-				// Each recording starts below a --- line, as in the web app.
-				const opensDictation =
-					finalChunk.trim() !== "" && awaitingText.current.delete(msg.source);
 				setter((prev) => ({
-					finalText: opensDictation
-						? beginDictation(prev.finalText, finalChunk)
-						: prev.finalText + finalChunk,
-					interimText: interim,
+					...prev,
+					liveFinal: prev.liveFinal + finalChunk,
+					liveProvisional: provisional,
 				}));
 			}
 
 			if (msg.type === "transcription-complete") {
 				const setter = msg.source === "tab" ? setTab : setMic;
-				// The final upload only fills in when nothing streamed during this recording.
-				const streamedNothing = awaitingText.current.delete(msg.source);
+				// Only the post-processed result joins the transcript, below a --- line as in the web app.
 				setter((prev) => ({
-					finalText: streamedNothing
-						? appendTranscript(prev.finalText, stripTags(msg.text))
-						: prev.finalText,
-					interimText: "",
+					finalText: appendTranscript(prev.finalText, stripTags(msg.text)),
+					liveFinal: "",
+					liveProvisional: "",
 				}));
 			}
 
@@ -116,12 +122,13 @@ export function useTranscript() {
 		setTimeout(() => setCopied(false), 2000);
 	}, [allText]);
 
+	// Clears the transcript only; a recording in progress keeps its live text.
 	const clear = useCallback(() => {
-		setMic({ finalText: "", interimText: "" });
-		setTab({ finalText: "", interimText: "" });
+		setMic((prev) => ({ ...prev, finalText: "" }));
+		setTab((prev) => ({ ...prev, finalText: "" }));
 	}, []);
 
-	// Typed edits become the text later dictation chunks append to.
+	// Typed edits become the text later dictation results append to.
 	const editMic = useCallback((finalText: string) => {
 		setMic((prev) => ({ ...prev, finalText }));
 	}, []);

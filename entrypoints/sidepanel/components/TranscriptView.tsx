@@ -1,6 +1,8 @@
+import { type LiveText, LiveTranscript } from "./LiveTranscript";
+
 interface Props {
 	finalText: string;
-	interimText: string;
+	live: LiveText | null;
 	copied: boolean;
 	deliveryNotice: string | null;
 	onCopy: () => void;
@@ -10,7 +12,7 @@ interface Props {
 
 export function TranscriptView({
 	finalText,
-	interimText,
+	live,
 	copied,
 	deliveryNotice,
 	onCopy,
@@ -42,7 +44,7 @@ export function TranscriptView({
 				placeholder="Your dictation appears here. You can type or edit it."
 				value={finalText}
 			/>
-			{interimText && <p className="interim">{interimText}</p>}
+			{live && <LiveTranscript {...live} />}
 		</div>
 	);
 }

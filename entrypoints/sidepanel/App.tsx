@@ -5,7 +5,7 @@ import { RecordingControls } from "./components/RecordingControls";
 import { TranscriptView } from "./components/TranscriptView";
 import { useAuth } from "./hooks/useAuth";
 import { useRecording } from "./hooks/useRecording";
-import { useTranscript } from "./hooks/useTranscript";
+import { type SourceState, useTranscript } from "./hooks/useTranscript";
 
 export function App() {
 	const auth = useAuth();
@@ -27,6 +27,14 @@ export function App() {
 			</>
 		);
 	}
+
+	// The live box shows while audio streams and until the final result arrives, as in the web app.
+	const showLive =
+		recording.state === "recording" || recording.state === "processing";
+	const liveText = (source: SourceState) =>
+		showLive
+			? { final: source.liveFinal, provisional: source.liveProvisional }
+			: null;
 
 	return (
 		<>
@@ -52,8 +60,9 @@ export function App() {
 			/>
 			{recording.mode === "meeting" ? (
 				<MeetingTranscriptView
-					tab={transcript.tab}
-					mic={transcript.mic}
+					tabText={transcript.tab.finalText}
+					micText={transcript.mic.finalText}
+					live={liveText(transcript.tab)}
 					copied={transcript.copied}
 					onCopy={transcript.copyToClipboard}
 					onClear={transcript.clear}
@@ -61,7 +70,7 @@ export function App() {
 			) : (
 				<TranscriptView
 					finalText={transcript.mic.finalText}
-					interimText={transcript.mic.interimText}
+					live={liveText(transcript.mic)}
 					copied={transcript.copied}
 					deliveryNotice={recording.deliveryNotice}
 					onCopy={transcript.copyToClipboard}

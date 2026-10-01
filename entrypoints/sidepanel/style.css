@@ -388,11 +388,6 @@ body {
 	word-break: break-word;
 }
 
-.transcript-text .interim,
-.transcript > .interim {
-	color: var(--faint);
-}
-
 textarea.transcript-text {
 	width: 100%;
 	min-height: 160px;
@@ -413,6 +408,50 @@ textarea.transcript-text:focus-visible {
 .transcript-text .speaker {
 	font-weight: 600;
 	color: var(--accent-text);
+}
+
+/* Live transcript: what the recording streams before the final result */
+.live-transcript {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 12px;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	line-height: 1.6;
+}
+
+.live-transcript h3 {
+	font-size: 14px;
+	font-weight: 600;
+}
+
+.live-transcript p {
+	display: flex;
+	gap: 8px;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.live-transcript .token-state {
+	flex: none;
+	min-width: 88px;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.5px;
+	line-height: 22px;
+	text-transform: uppercase;
+}
+
+/* A long meeting scrolls here instead of growing the panel. */
+.live-final {
+	max-height: 160px;
+	overflow-y: auto;
+}
+
+.live-provisional {
+	color: var(--faint);
 }
 
 /* Meeting split view */

@@ -24,13 +24,6 @@ export function appendTranscript(existing: string, incoming: string) {
 	return current ? `${current}${DICTATION_SEPARATOR}${text}` : text;
 }
 
-/** Opens a new dictation with its first streamed chunk; later chunks are appended as they are. */
-export function beginDictation(existing: string, chunk: string) {
-	const text = chunk.trimStart();
-	const current = existing.trimEnd();
-	return current ? `${current}${DICTATION_SEPARATOR}${text}` : text;
-}
-
 export function isEditableTarget(target: EventTarget | null) {
 	if (!(target instanceof Element)) return false;
 	return Boolean(target.closest("input, textarea, [contenteditable='true']"));

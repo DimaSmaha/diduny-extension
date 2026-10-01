@@ -215,12 +215,17 @@ test("loaded extension signs in through the mock proxy BFF, delivers dictation, 
 					chrome.storage.local.set({ micGranted: true }, resolve);
 				}),
 		);
+		const liveTranscript = panel.getByRole("region", {
+			name: "Live transcript",
+		});
 		const dictate = async ({
 			diarization = false,
 			mode = "voice",
+			whileRecording,
 		}: {
 			diarization?: boolean;
 			mode?: "translation" | "voice";
+			whileRecording?: () => Promise<void>;
 		} = {}) => {
 			await panel.evaluate(
 				({ diarization: selectedDiarization, mode: selectedMode }) => {
@@ -237,21 +242,29 @@ test("loaded extension signs in through the mock proxy BFF, delivers dictation, 
 				{ diarization, mode },
 			);
 			await expect(panel.getByText("Recording...")).toBeVisible();
+			await whileRecording?.();
 			await panel.evaluate(() => {
 				chrome.runtime.sendMessage({ type: "stop-recording" });
 			});
 			await expect(panel.getByText("Done")).toBeVisible();
+			await expect(liveTranscript).toBeHidden();
 		};
-		await dictate({ diarization: true });
+		await dictate({
+			diarization: true,
+			// Stopping right after "Recording..." can beat the first audio frame on a slow machine.
+			whileRecording: () =>
+				expect
+					.poll(() =>
+						mock
+							.realtimeFrames()
+							.some((frame) => frame.isBinary && frame.data.length > 0),
+					)
+					.toBeTruthy(),
+		});
 
 		await expect(fixture.locator("#target")).toHaveValue("Mock transcript", {
 			timeout: 30_000,
 		});
-		expect(
-			mock
-				.realtimeFrames()
-				.some((frame) => frame.isBinary && frame.data.length > 0),
-		).toBeTruthy();
 		expect(
 			mock
 				.realtimeFrames()
@@ -273,9 +286,43 @@ test("loaded extension signs in through the mock proxy BFF, delivers dictation, 
 
 		await fixture.bringToFront();
 		await fixture.locator("#target").focus();
-		await dictate({ mode: "translation" });
-		// Each recording starts below a --- line in the side panel, as in the web app.
 		const panelTranscript = panel.getByLabel("Transcript", { exact: true });
+		await dictate({
+			mode: "translation",
+			whileRecording: async () => {
+				// Streamed text shows in the live box only; the transcript waits for the final result.
+				await options.evaluate(() => {
+					chrome.runtime.sendMessage({
+						source: "mic",
+						tokens: [
+							{
+								confidence: 1,
+								end_ms: 0,
+								is_final: true,
+								start_ms: 0,
+								text: "Live ",
+							},
+							{
+								confidence: 1,
+								end_ms: 0,
+								is_final: false,
+								start_ms: 0,
+								text: "words",
+							},
+						],
+						type: "realtime-tokens",
+					});
+				});
+				await expect(liveTranscript.getByTestId("live-final-text")).toHaveText(
+					"Live ",
+				);
+				await expect(
+					liveTranscript.getByTestId("live-provisional-text"),
+				).toHaveText("words");
+				await expect(panelTranscript).toHaveValue("Mock transcript");
+			},
+		});
+		// Each recording's result lands below a --- line in the side panel, as in the web app.
 		await expect(panelTranscript).toHaveValue(
 			"Mock transcript\n---\nMock transcript",
 		);

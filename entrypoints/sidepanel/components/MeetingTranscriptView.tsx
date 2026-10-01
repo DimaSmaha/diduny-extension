@@ -1,67 +1,63 @@
+import { type LiveText, LiveTranscript } from "./LiveTranscript";
+
 interface SourceProps {
 	label: string;
 	finalText: string;
-	interimText: string;
 }
 
-function SourcePanel({ label, finalText, interimText }: SourceProps) {
-	if (!finalText && !interimText) return null;
+function SourcePanel({ label, finalText }: SourceProps) {
+	if (!finalText) return null;
 
 	return (
 		<div className="source-panel">
 			<div className="source-label">{label}</div>
-			<div className="transcript-text">
-				{finalText}
-				{interimText && <span className="interim">{interimText}</span>}
-			</div>
+			<div className="transcript-text">{finalText}</div>
 		</div>
 	);
 }
 
 interface Props {
-	tab: { finalText: string; interimText: string };
-	mic: { finalText: string; interimText: string };
+	tabText: string;
+	micText: string;
+	live: LiveText | null;
 	copied: boolean;
 	onCopy: () => void;
 	onClear: () => void;
 }
 
 export function MeetingTranscriptView({
-	tab,
-	mic,
+	tabText,
+	micText,
+	live,
 	copied,
 	onCopy,
 	onClear,
 }: Props) {
-	const hasText =
-		tab.finalText || tab.interimText || mic.finalText || mic.interimText;
-	if (!hasText) return null;
+	const hasText = tabText || micText;
+	if (!hasText && !live) return null;
 
 	return (
 		<div className="transcript">
-			<div className="transcript-header">
-				<h3>Meeting Transcript</h3>
-				<div>
-					<button type="button" className="btn btn-ghost" onClick={onCopy}>
-						{copied ? "Copied!" : "Copy all"}
-					</button>
-					<button type="button" className="btn btn-ghost" onClick={onClear}>
-						Clear
-					</button>
-				</div>
-			</div>
-			<div className="meeting-sources">
-				<SourcePanel
-					label="Shared Audio"
-					finalText={tab.finalText}
-					interimText={tab.interimText}
-				/>
-				<SourcePanel
-					label="Microphone"
-					finalText={mic.finalText}
-					interimText={mic.interimText}
-				/>
-			</div>
+			{hasText && (
+				<>
+					<div className="transcript-header">
+						<h3>Meeting Transcript</h3>
+						<div>
+							<button type="button" className="btn btn-ghost" onClick={onCopy}>
+								{copied ? "Copied!" : "Copy all"}
+							</button>
+							<button type="button" className="btn btn-ghost" onClick={onClear}>
+								Clear
+							</button>
+						</div>
+					</div>
+					<div className="meeting-sources">
+						<SourcePanel label="Shared Audio" finalText={tabText} />
+						<SourcePanel label="Microphone" finalText={micText} />
+					</div>
+				</>
+			)}
+			{live && <LiveTranscript {...live} />}
 		</div>
 	);
 }
