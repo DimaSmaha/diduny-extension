@@ -336,12 +336,13 @@ async function stopCapture(partiallyRecovered = false) {
 			let segments: readonly TranscriptSegment[] = [];
 			let transcribed = false;
 			let error: Error | undefined;
+			let realtimeFailure: unknown;
 			try {
 				text = await pipeline.realtime.result;
 				segments = pipeline.realtimeSegments;
 				transcribed = Boolean(text.trim());
 			} catch (cause) {
-				logError("offscreen:realtime", cause);
+				realtimeFailure = cause;
 			}
 			try {
 				if (
@@ -367,6 +368,16 @@ async function stopCapture(partiallyRecovered = false) {
 				logError("offscreen:transcribe", cause);
 				error =
 					cause instanceof Error ? cause : new Error("Transcription failed");
+			}
+			// The upload covers a stream that ends without a result, so that is only an error when the upload fails too.
+			if (realtimeFailure && transcribed) {
+				crashLog(
+					"offscreen:realtime",
+					"info",
+					`${realtimeFailure instanceof Error ? realtimeFailure.message : String(realtimeFailure)}; transcribed the uploaded recording instead`,
+				);
+			} else if (realtimeFailure) {
+				logError("offscreen:realtime", realtimeFailure);
 			}
 			try {
 				await saveExtensionRecording(
