@@ -885,8 +885,16 @@ export async function buildServer({
 			const id = await sessions.create(session);
 			reply.header("set-cookie", sessionCookies(id));
 			return { email: session.email };
-		} catch {
-			return reply.code(401).send({ error: "otp_verification_failed" });
+		} catch (error) {
+			// Only a refused code is the person's to fix; outages and rate limits must not read as a wrong code.
+			if (
+				error instanceof UpstreamAuthError &&
+				error.status >= 400 &&
+				error.status < 500 &&
+				error.status !== 429
+			)
+				return reply.code(401).send({ error: "otp_verification_failed" });
+			return reply.code(502).send({ error: "upstream_auth_unavailable" });
 		}
 	});
 	server.get("/bff/auth/session", (request) => sessionResponse(request));

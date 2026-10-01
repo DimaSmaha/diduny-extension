@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { DidunyError } from "../../src/core/errors";
 import {
 	errorFromResponse,
+	isIncorrectOtpError,
 	isInvalidEmailError,
 	userErrorMessage,
 } from "./errors";
@@ -69,4 +70,20 @@ test("recognises a BFF invalid_email rejection only for a 400", () => {
 		),
 	).toBeFalse();
 	expect(isInvalidEmailError(new Error("invalid_email"))).toBeFalse();
+});
+
+test("recognises a refused one-time code apart from an expired session or outage", () => {
+	expect(
+		isIncorrectOtpError(
+			errorFromResponse(401, { error: "otp_verification_failed" }),
+		),
+	).toBeTrue();
+	expect(
+		isIncorrectOtpError(errorFromResponse(401, { error: "unauthenticated" })),
+	).toBeFalse();
+	expect(
+		isIncorrectOtpError(
+			errorFromResponse(502, { error: "upstream_auth_unavailable" }),
+		),
+	).toBeFalse();
 });

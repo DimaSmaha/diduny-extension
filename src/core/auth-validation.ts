@@ -44,6 +44,11 @@ export function normalizeEmail(value: string) {
 	return value.trim().normalize("NFC");
 }
 
+/** Drops the spaces a code picks up when pasted from an email ("123 456"). */
+export function normalizeOtp(value: string) {
+	return value.replace(/\s+/g, "");
+}
+
 export function isValidOtp(value: unknown): value is string {
 	return typeof value === "string" && /^\d{6}$/.test(value);
 }

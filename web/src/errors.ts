@@ -22,7 +22,7 @@ function errorCode(value: unknown) {
 export function errorFromResponse(status: number, body: unknown) {
 	const code = errorCode(body);
 	if (status === 401 || code === "unauthenticated")
-		return new DidunyError("authentication_failed", { status });
+		return new DidunyError("authentication_failed", { body, status });
 	if (status === 402) {
 		const fields = body && typeof body === "object" ? body : {};
 		return new DidunyError("quota_exhausted", {
@@ -41,6 +41,15 @@ export function isInvalidEmailError(error: unknown) {
 		isDidunyError(error) &&
 		error.details.status === 400 &&
 		errorCode(error.details.body) === "invalid_email"
+	);
+}
+
+/** The sign-in service refused the code: wrong, expired, or already used. */
+export function isIncorrectOtpError(error: unknown) {
+	return (
+		isDidunyError(error) &&
+		error.details.status === 401 &&
+		errorCode(error.details.body) === "otp_verification_failed"
 	);
 }
 

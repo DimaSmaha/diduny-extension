@@ -54,7 +54,12 @@ export {
 	normalizeShortcut,
 	shortcutKeyFromEvent,
 } from "./shortcuts";
-export { isValidEmail, isValidOtp, normalizeEmail } from "./auth-validation";
+export {
+	isValidEmail,
+	isValidOtp,
+	normalizeEmail,
+	normalizeOtp,
+} from "./auth-validation";
 export {
 	RealtimeSession,
 	RealtimeSessionError,

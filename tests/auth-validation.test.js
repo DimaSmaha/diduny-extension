@@ -1,5 +1,10 @@
 import { expect, test } from "bun:test";
-import { isValidEmail, isValidOtp, normalizeEmail } from "../src/core";
+import {
+	isValidEmail,
+	isValidOtp,
+	normalizeEmail,
+	normalizeOtp,
+} from "../src/core";
 import { invalidEmails, projectEmails, validEmails } from "./fixtures/emails";
 
 test.each([...validEmails, ...projectEmails])("accepts %s", (email) => {
@@ -65,4 +70,9 @@ test("rejects malformed OTP credentials before they reach a transport", () => {
 	expect(isValidOtp("123456")).toBeTrue();
 	expect(isValidOtp("12345")).toBeFalse();
 	expect(isValidOtp("12345x")).toBeFalse();
+});
+
+test("drops the spaces a code picks up when pasted", () => {
+	expect(normalizeOtp(" 123 456\n")).toBe("123456");
+	expect(isValidOtp(normalizeOtp("12 34 5"))).toBeFalse();
 });

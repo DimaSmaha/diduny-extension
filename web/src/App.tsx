@@ -12,6 +12,7 @@ import {
 	isValidEmail,
 	isValidOtp,
 	normalizeEmail,
+	normalizeOtp,
 } from "../../src/core/auth-validation";
 import { AUDIO_FORMAT, WEB_LATENCY_TARGET_MS } from "../../src/core/constants";
 import type { RealtimeToken } from "../../src/core/realtime-session";
@@ -48,6 +49,7 @@ import {
 } from "./dictation";
 import {
 	errorFromResponse,
+	isIncorrectOtpError,
 	isInvalidEmailError,
 	localProcessUnavailable,
 	userErrorMessage,
@@ -244,6 +246,7 @@ export function App() {
 		() => localStorage.getItem(onboardingCompletedStorageKey) !== "1",
 	);
 	const [otp, setOtp] = useState("");
+	const [otpError, setOtpError] = useState("");
 	const [pasteOpen, setPasteOpen] = useState(false);
 	const [signedInEmail, setSignedInEmail] = useState("");
 	const [speechLanguageHints, setSpeechLanguageHints] = useState<
@@ -902,6 +905,7 @@ export function App() {
 		setEmail("");
 		setEmailError("");
 		setOtp("");
+		setOtpError("");
 	}
 
 	async function sendOtp(event: FormEvent<HTMLFormElement>) {
@@ -922,6 +926,7 @@ export function App() {
 				method: "POST",
 			});
 			setOtp("");
+			setOtpError("");
 			setAuthState("otp-sent");
 			setStatus(t("auth.checkInbox"));
 		} catch (error) {
@@ -936,20 +941,33 @@ export function App() {
 
 	async function verifyOtp(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
-		if (!isValidEmail(email) || !isValidOtp(otp)) {
+		const code = normalizeOtp(otp);
+		if (!isValidOtp(code)) {
+			setOtpError(t("auth.invalidCode"));
+			setStatus("");
+			return;
+		}
+		setOtp(code);
+		setOtpError("");
+		if (!isValidEmail(email)) {
 			setStatus(t("errors.requestRejected"));
 			return;
 		}
 		setStatus(t("auth.signingIn"));
 		try {
 			await bffJson("/bff/auth/verify-otp", {
-				body: JSON.stringify({ email, otp }),
+				body: JSON.stringify({ email, otp: code }),
 				headers: { "content-type": "application/json" },
 				method: "POST",
 			});
 			clearSignInFields();
 			await refreshSession();
 		} catch (error) {
+			if (isIncorrectOtpError(error)) {
+				setOtpError(t("auth.incorrectCode"));
+				setStatus("");
+				return;
+			}
 			setStatus(userErrorMessage(error, t));
 		}
 	}
@@ -1092,17 +1110,28 @@ export function App() {
 				<p>{t("auth.description")}</p>
 				{/* Keys stop React reusing the "Use another email" button as the email form submit mid-click, which submitted an empty address. */}
 				{authState === "otp-sent" ? (
-					<form key="otp" onSubmit={verifyOtp}>
+					// noValidate: a malformed or refused code is explained inline below the field, not in a browser tooltip.
+					<form key="otp" noValidate onSubmit={verifyOtp}>
 						<label htmlFor="otp">{t("auth.oneTimeCode")}</label>
 						<input
+							aria-describedby={otpError ? "otp-error" : undefined}
+							aria-invalid={otpError ? true : undefined}
 							autoComplete="one-time-code"
 							id="otp"
 							inputMode="numeric"
-							onChange={(event) => setOtp(event.target.value)}
+							onChange={(event) => {
+								setOtp(event.target.value);
+								setOtpError("");
+							}}
 							pattern="[0-9]{6}"
 							required
 							value={otp}
 						/>
+						{otpError ? (
+							<p className="field-error" id="otp-error">
+								{otpError}
+							</p>
+						) : null}
 						<button type="submit">{t("auth.signIn")}</button>
 						<button
 							className="secondary"

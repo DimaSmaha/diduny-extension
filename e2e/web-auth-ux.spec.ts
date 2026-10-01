@@ -23,17 +23,23 @@ async function expectNoAxeViolations(page: Page) {
 
 async function startStack() {
 	const sentEmails: string[] = [];
+	const verifiedCodes: string[] = [];
 	const upstream = Fastify();
 	upstream.post("/api/v1/auth/send-otp", async (request) => {
 		sentEmails.push((request.body as { email: string }).email);
 		return {};
 	});
-	upstream.post("/api/v1/auth/verify-otp", async (request) => ({
-		accessToken: "auth-ux-token",
-		accessTokenExpiresAt: Date.now() + 300_000,
-		refreshToken: "auth-ux-refresh",
-		user: { email: (request.body as { email: string }).email },
-	}));
+	upstream.post("/api/v1/auth/verify-otp", async (request, reply) => {
+		const { email, otp } = request.body as { email: string; otp: string };
+		verifiedCodes.push(otp);
+		if (otp !== "123456") return reply.code(401).send({ error: "invalid_otp" });
+		return {
+			accessToken: "auth-ux-token",
+			accessTokenExpiresAt: Date.now() + 300_000,
+			refreshToken: "auth-ux-refresh",
+			user: { email },
+		};
+	});
 	upstream.post("/api/v1/auth/logout", async (_request, reply) =>
 		reply.code(204).send(),
 	);
@@ -56,6 +62,7 @@ async function startStack() {
 		browser,
 		page,
 		sentEmails,
+		verifiedCodes,
 		async stop() {
 			bff.server.closeAllConnections?.();
 			upstream.server.closeAllConnections?.();
@@ -165,6 +172,52 @@ test("explains an invalid address inline without contacting the service", async 
 			page.getByText("Enter a valid email address", { exact: false }),
 		).toHaveCount(0);
 		expect(stack.sentEmails).toEqual([]);
+	} finally {
+		await stack.stop();
+	}
+});
+
+test("explains a malformed or incorrect one-time code inline", async () => {
+	const stack = await startStack();
+	const { page } = stack;
+	try {
+		await page.getByLabel("Email").fill("person@example.com");
+		await page.getByRole("button", { name: "Send one-time code" }).click();
+		const code = page.getByLabel("One-time code");
+		const signIn = page.getByRole("button", { name: "Sign in", exact: true });
+		const invalid = page.getByText("Enter the six-digit code", {
+			exact: false,
+		});
+		const incorrect = page.getByText("That code is incorrect", {
+			exact: false,
+		});
+
+		// Malformed codes are explained without contacting the service.
+		for (const value of ["", "12345", "12345x", "1234567"]) {
+			await code.fill(value);
+			await signIn.click();
+			await expect(invalid).toBeVisible();
+			await expect(code).toHaveAttribute("aria-invalid", "true");
+		}
+		expect(stack.verifiedCodes).toEqual([]);
+		await expectNoAxeViolations(page);
+		await code.fill("1");
+		await expect(invalid).toHaveCount(0);
+		await expect(code).not.toHaveAttribute("aria-invalid");
+
+		await code.fill("654321");
+		await signIn.click();
+		await expect(incorrect).toBeVisible();
+		await expect(code).toHaveAttribute("aria-invalid", "true");
+		await expect(page.getByText("sign-in has expired")).toHaveCount(0);
+		await expectNoAxeViolations(page);
+
+		// A code pasted with spaces still signs in.
+		await code.fill(" 123 456 ");
+		await expect(incorrect).toHaveCount(0);
+		await signIn.click();
+		await expect(page.getByLabel("Dictation document")).toBeVisible();
+		expect(stack.verifiedCodes).toEqual(["654321", "123456"]);
 	} finally {
 		await stack.stop();
 	}

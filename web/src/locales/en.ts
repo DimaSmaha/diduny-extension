@@ -48,6 +48,9 @@ export const en = {
 		couldNotVerifyCode: "Could not verify the code.",
 		signedOut: "Signed out.",
 		invalidEmail: "Enter a valid email address, like name@example.com.",
+		invalidCode: "Enter the six-digit code from the email, like 123456.",
+		incorrectCode:
+			"That code is incorrect or has expired. Check the latest email, or choose “Use another email” to get a new code.",
 		signOutConfirm: {
 			title: "Sign out of Diduny?",
 			body: "You'll need a new one-time code to sign in again.",

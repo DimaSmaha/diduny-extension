@@ -12,6 +12,7 @@ const databasePath = join(
 );
 const upstreamRequests = [];
 let sendOtpStatus = 204;
+let verifyOtpStatus = 200;
 let echoUser = true;
 let server;
 let sessions;
@@ -25,6 +26,11 @@ beforeAll(async () => {
 			if (String(url).endsWith("/auth/send-otp"))
 				return new Response(null, { status: sendOtpStatus });
 			if (String(url).endsWith("/auth/verify-otp")) {
+				if (verifyOtpStatus !== 200)
+					return Response.json(
+						{ error: "invalid_otp" },
+						{ status: verifyOtpStatus },
+					);
 				return Response.json({
 					accessToken: "backend-bearer-token",
 					accessTokenExpiresAt: Date.now() + 120_000,
@@ -142,5 +148,28 @@ test.each([
 
 		expect(sent.statusCode).toBe(status);
 		expect(sent.json()).toEqual({ error });
+	},
+);
+
+test.each([
+	[400, 401, "otp_verification_failed"],
+	[401, 401, "otp_verification_failed"],
+	[422, 401, "otp_verification_failed"],
+	[429, 502, "upstream_auth_unavailable"],
+	[500, 502, "upstream_auth_unavailable"],
+])(
+	"maps an upstream %i on verify-otp to %i %s",
+	async (upstreamStatus, status, error) => {
+		verifyOtpStatus = upstreamStatus;
+		const verified = await inject({
+			method: "POST",
+			payload: { email: "simple@project.com", otp: "654321" },
+			url: "/bff/auth/verify-otp",
+		});
+		verifyOtpStatus = 200;
+
+		expect(verified.statusCode).toBe(status);
+		expect(verified.json()).toEqual({ error });
+		expect(verified.headers["set-cookie"]).toBeUndefined();
 	},
 );
