@@ -184,6 +184,16 @@ test("start page does not require microphone access before sign-in", async () =>
 		await expect(page.getByLabel("Email")).toBeVisible();
 		await page.reload();
 		await expect(page.getByLabel("Email")).toBeVisible();
+
+		// The sign-in screen keeps the delivery info one click away.
+		await page.getByRole("button", { name: "About delivery" }).click();
+		await expect(page.getByText("Step 1 of 2")).toBeVisible();
+		await expect(
+			page.getByRole("heading", { name: "Where your words end up" }),
+		).toBeVisible();
+		await page.getByRole("button", { name: "Next" }).click();
+		await page.getByRole("button", { name: "Continue to sign in" }).click();
+		await expect(page.getByLabel("Email")).toBeVisible();
 	} finally {
 		bff.server.closeAllConnections?.();
 		await browser.close();

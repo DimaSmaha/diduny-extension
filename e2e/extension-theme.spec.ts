@@ -57,7 +57,7 @@ test("extension pages share one theme toggle that persists in chrome.storage", a
 		// Each page starts from the saved theme, then flips it for the next one.
 		let theme: "dark" | "light" = "dark";
 		for (const page of ["sidepanel.html", "mic-permission.html"]) {
-			const next = theme === "dark" ? "light" : "dark";
+			const next: "dark" | "light" = theme === "dark" ? "light" : "dark";
 			const tab = await context.newPage();
 			await tab.goto(`${base}/${page}`);
 			await expect(tab.locator("html")).toHaveAttribute("data-theme", theme);

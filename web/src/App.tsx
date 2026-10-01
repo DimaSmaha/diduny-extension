@@ -1097,6 +1097,13 @@ export function App() {
 				<p aria-live="polite" className="status">
 					{status}
 				</p>
+				<button
+					className="secondary"
+					onClick={() => setOnboardingOpen(true)}
+					type="button"
+				>
+					{t("app.nav.aboutDelivery")}
+				</button>
 			</main>
 		);
 	}
