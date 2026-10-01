@@ -5,6 +5,7 @@ interface Props {
 	deliveryNotice: string | null;
 	onCopy: () => void;
 	onClear: () => void;
+	onEdit: (text: string) => void;
 }
 
 export function TranscriptView({
@@ -14,10 +15,8 @@ export function TranscriptView({
 	deliveryNotice,
 	onCopy,
 	onClear,
+	onEdit,
 }: Props) {
-	const hasText = finalText || interimText;
-	if (!hasText) return null;
-
 	return (
 		<div className="transcript">
 			{deliveryNotice && <p className="delivery-notice">{deliveryNotice}</p>}
@@ -36,10 +35,14 @@ export function TranscriptView({
 					)}
 				</div>
 			</div>
-			<div className="transcript-text">
-				{finalText}
-				{interimText && <span className="interim">{interimText}</span>}
-			</div>
+			<textarea
+				aria-label="Transcript"
+				className="transcript-text"
+				onChange={(event) => onEdit(event.target.value)}
+				placeholder="Your dictation appears here. You can type or edit it."
+				value={finalText}
+			/>
+			{interimText && <p className="interim">{interimText}</p>}
 		</div>
 	);
 }

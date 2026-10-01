@@ -6,6 +6,7 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { wordCount } from "../../src/core/models";
 import type { RetentionCategory, RetentionPolicy } from "../../src/core/ports";
 import { DEFAULT_TYPING_SPEED_WPM } from "../../src/core/settings";
 import { isReservedShortcut } from "../../src/core/shortcuts";
@@ -227,15 +228,10 @@ function MicrophoneSettings({
 	);
 }
 
-export type SettingsSection = "translation";
-
 export function SettingsPane({
-	focusSection,
 	onSettingsChanged,
 	revision,
 }: {
-	/** Section to scroll to and focus once settings load, e.g. from the Dictation page. */
-	focusSection?: SettingsSection;
 	onSettingsChanged(): void;
 	revision: number;
 }) {
@@ -259,9 +255,12 @@ export function SettingsPane({
 		useState("uk");
 	const [translationTargetLanguage, setTranslationTargetLanguage] =
 		useState("en");
+	const [typingTestText, setTypingTestText] = useState("");
 	const resetReturnFocus = useRef<HTMLButtonElement>(null);
-	const translationHeading = useRef<HTMLHeadingElement>(null);
-	const loaded = snapshot !== null;
+	// The test runs from the first key to the last, so a pause before saving doesn't count.
+	const typingTestTiming = useRef<{ firstAt: number; lastAt: number } | null>(
+		null,
+	);
 
 	const refresh = useCallback(async () => {
 		try {
@@ -291,13 +290,6 @@ export function SettingsPane({
 		void revision;
 		void refresh();
 	}, [refresh, revision]);
-
-	useEffect(() => {
-		if (!loaded || focusSection !== "translation") return;
-		const heading = translationHeading.current;
-		heading?.scrollIntoView({ block: "start" });
-		heading?.focus();
-	}, [focusSection, loaded]);
 
 	async function saveCleanup(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
@@ -437,6 +429,43 @@ export function SettingsPane({
 			await refresh();
 			onSettingsChanged();
 			setMessage(t("settings.typingSpeedSaved"));
+		} catch (error) {
+			setMessage(errorMessage(error, t));
+		}
+	}
+
+	function editTypingTest(value: string) {
+		const now = performance.now();
+		if (!value.trim()) typingTestTiming.current = null;
+		else if (!typingTestTiming.current)
+			typingTestTiming.current = { firstAt: now, lastAt: now };
+		else typingTestTiming.current.lastAt = now;
+		setTypingTestText(value);
+	}
+
+	async function saveMeasuredSpeed() {
+		const timing = typingTestTiming.current;
+		const words = wordCount(typingTestText);
+		const seconds = timing ? (timing.lastAt - timing.firstAt) / 1_000 : 0;
+		if (!words || seconds <= 0) {
+			setMessage(t("settings.typingNeedsWords"));
+			return;
+		}
+		const wordsPerMinute = Math.max(1, Math.round((words * 60) / seconds));
+		// Faster than anyone types: the sentence was pasted.
+		if (wordsPerMinute > MAX_TYPING_SPEED_WPM) {
+			setMessage(t("settings.typingTooFast", { max: MAX_TYPING_SPEED_WPM }));
+			return;
+		}
+		try {
+			await updateWorkspaceSettings({
+				typingSpeedWordsPerMinute: wordsPerMinute,
+			});
+			typingTestTiming.current = null;
+			setTypingTestText("");
+			await refresh();
+			onSettingsChanged();
+			setMessage(t("settings.typingMeasuredSaved", { speed: wordsPerMinute }));
 		} catch (error) {
 			setMessage(errorMessage(error, t));
 		}
@@ -587,11 +616,7 @@ export function SettingsPane({
 				aria-labelledby="translation-languages-title"
 				className="settings-section"
 			>
-				<h3
-					id="translation-languages-title"
-					ref={translationHeading}
-					tabIndex={-1}
-				>
+				<h3 id="translation-languages-title">
 					{t("settings.translationLanguages")}
 				</h3>
 				<form onSubmit={saveTranslationLanguages}>
@@ -679,6 +704,31 @@ export function SettingsPane({
 								})}
 					</p>
 				)}
+				<p>{t("settings.typingPrompt")}</p>
+				<blockquote className="typing-sentence">
+					{t("settings.calibrationText")}
+				</blockquote>
+				<label htmlFor="typing-test-text">
+					{t("settings.typingTestText")}
+					<textarea
+						aria-describedby="typing-test-hint"
+						autoComplete="off"
+						id="typing-test-text"
+						onChange={(event) => editTypingTest(event.target.value)}
+						spellCheck={false}
+						value={typingTestText}
+					/>
+				</label>
+				<p className="hint" id="typing-test-hint">
+					{t("settings.typingTestHint")}
+				</p>
+				<button
+					disabled={!typingTestText.trim()}
+					onClick={() => void saveMeasuredSpeed()}
+					type="button"
+				>
+					{t("settings.saveMeasuredSpeed")}
+				</button>
 				<form onSubmit={saveTypingSpeed}>
 					<label htmlFor="typing-speed">
 						{t("settings.typingSpeed")}

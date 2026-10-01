@@ -388,8 +388,26 @@ body {
 	word-break: break-word;
 }
 
-.transcript-text .interim {
+.transcript-text .interim,
+.transcript > .interim {
 	color: var(--faint);
+}
+
+textarea.transcript-text {
+	width: 100%;
+	min-height: 160px;
+	color: var(--text);
+	font-family: inherit;
+	resize: vertical;
+}
+
+textarea.transcript-text::placeholder {
+	color: var(--faint);
+}
+
+textarea.transcript-text:focus-visible {
+	outline: 2px solid var(--accent-text);
+	outline-offset: 2px;
 }
 
 .transcript-text .speaker {

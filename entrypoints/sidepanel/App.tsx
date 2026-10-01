@@ -66,6 +66,7 @@ export function App() {
 					deliveryNotice={recording.deliveryNotice}
 					onCopy={transcript.copyToClipboard}
 					onClear={transcript.clear}
+					onEdit={transcript.editMic}
 				/>
 			)}
 		</>

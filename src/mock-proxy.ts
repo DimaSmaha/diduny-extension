@@ -18,6 +18,10 @@ export interface MockProxyOptions {
 	/** Number each transcript ("Mock transcript 3") so manual runs can tell results apart. */
 	numberTranscripts?: boolean;
 	refreshToken?: string;
+	/** Stream the transcript word by word while audio arrives, so manual runs show the live panel. */
+	streamLiveTokens?: boolean;
+	/** Append "(uk->en)" to translations so manual runs show which direction was used. */
+	tagTranslations?: boolean;
 }
 
 export interface MockTranscription {
@@ -45,6 +49,8 @@ export interface MockRealtimeFrame {
 
 const defaultSseBody =
 	': mock keepalive\n\nevent: status\ndata: processing\n\nevent: completed\ndata: {"text":"Mock transcript","tokens":[]}\n\n';
+/** About half a second of 16 kHz mono s16le audio per streamed word. */
+const LIVE_TOKEN_STEP_BYTES = 16_000;
 const defaultConfig: MockProxyConfig = {
 	endpoints: { sttBaseURL: "mock://local", sttModel: "mock" },
 	featureFlags: { realtime: true },
@@ -82,6 +88,8 @@ export async function buildMockProxy({
 	accessToken = "mock-access-token",
 	numberTranscripts = false,
 	refreshToken: configuredRefreshToken = "mock-refresh-token",
+	streamLiveTokens = false,
+	tagTranslations = false,
 }: MockProxyOptions = {}) {
 	const server = Fastify({ logger: false });
 	const mailbox: MockMailboxMessage[] = [];
@@ -221,32 +229,68 @@ export async function buildMockProxy({
 		).searchParams.get("token");
 		if (token !== accessToken) return socket.close(4001, "unauthorized");
 		let realtimeConfig: Record<string, unknown> = {};
+		// Live streaming state: the transcript's words, how many are final, and audio bytes seen.
+		let liveWords: string[] | null = null;
+		let liveFinalCount = 0;
+		let liveBytes = 0;
+		const speakerField = () =>
+			realtimeConfig.enable_speaker_diarization === true
+				? { speaker: "1" }
+				: {};
+		const liveWord = (index: number) =>
+			index === 0 ? (liveWords?.[0] ?? "") : ` ${liveWords?.[index] ?? ""}`;
 		socket.send(JSON.stringify({ type: "proxy_ready" }));
 		socket.on("message", (data, isBinary) => {
-			realtimeFrames.push({
-				data: isBinary
-					? Array.isArray(data)
-						? Buffer.concat(data.map((part) => Buffer.from(part)))
-						: Buffer.from(data as Uint8Array)
-					: data.toString(),
-				isBinary,
-			});
-			if (isBinary) return;
+			const frame = isBinary
+				? Array.isArray(data)
+					? Buffer.concat(data.map((part) => Buffer.from(part)))
+					: Buffer.from(data as Uint8Array)
+				: data.toString();
+			realtimeFrames.push({ data: frame, isBinary });
+			if (isBinary) {
+				if (!streamLiveTokens) return;
+				liveWords ??= nextTranscript().split(" ");
+				const step = Math.floor(liveBytes / LIVE_TOKEN_STEP_BYTES);
+				liveBytes += frame.length;
+				if (Math.floor(liveBytes / LIVE_TOKEN_STEP_BYTES) === step) return;
+				// Each step finalizes the shown word and shows the next one as provisional.
+				const tokens: Record<string, unknown>[] = [];
+				if (step > 0 && liveFinalCount < liveWords.length) {
+					tokens.push({
+						is_final: true,
+						...speakerField(),
+						text: liveWord(liveFinalCount),
+					});
+					liveFinalCount += 1;
+				}
+				if (liveFinalCount < liveWords.length)
+					tokens.push({ is_final: false, text: liveWord(liveFinalCount) });
+				if (tokens.length) socket.send(JSON.stringify({ tokens }));
+				return;
+			}
 			const message = String(data);
 			if (message.includes('"finalize"')) {
-				const diarization = realtimeConfig.enable_speaker_diarization === true;
+				const remaining = liveWords
+					? liveWords
+							.slice(liveFinalCount)
+							.map((_, index) => liveWord(liveFinalCount + index))
+							.join("")
+					: nextTranscript();
+				if (liveWords) liveFinalCount = liveWords.length;
 				socket.send(
 					JSON.stringify({
 						finished: realtimeConfig.mode !== "translate",
-						tokens: [
-							{
-								end_ms: 480,
-								is_final: true,
-								...(diarization ? { speaker: "1" } : {}),
-								start_ms: 0,
-								text: nextTranscript(),
-							},
-						],
+						tokens: remaining
+							? [
+									{
+										end_ms: 480,
+										is_final: true,
+										...speakerField(),
+										start_ms: 0,
+										text: remaining,
+									},
+								]
+							: [],
 					}),
 				);
 				socket.send(
@@ -270,9 +314,17 @@ export async function buildMockProxy({
 	});
 	server.get("/api/v1/translations", async (request, reply) => {
 		if (!requireBearer(request, reply, accessToken)) return;
-		const query = request.query as { q?: unknown };
+		const query = request.query as { q?: unknown; sl?: unknown; tl?: unknown };
+		const text = typeof query.q === "string" ? query.q : "";
 		return {
-			sentences: [{ trans: typeof query.q === "string" ? query.q : "" }],
+			sentences: [
+				{
+					trans:
+						tagTranslations && text
+							? `${text} (${String(query.sl)}->${String(query.tl)})`
+							: text,
+				},
+			],
 		};
 	});
 	server.get("/api/v1/usage/me", async (request, reply) => {

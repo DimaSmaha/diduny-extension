@@ -81,13 +81,26 @@ test("translation dictation and pasted text use the explicit saved language pair
 			.toBe("en");
 
 		await page.getByRole("button", { name: "Dictation" }).click();
-		await expect(page.getByText("Українська → English")).toBeVisible();
-		await page.getByRole("button", { name: "Change languages" }).click();
-		await expect(
-			page.getByRole("heading", { name: "Translation languages" }),
-		).toBeFocused();
-		await page.getByRole("button", { exact: true, name: "Diduny" }).click();
-		await page.getByLabel("Translation dictation").check();
+		const dictationPair = page.getByRole("group", {
+			name: "Translation dictation languages",
+		});
+		await expect(dictationPair.getByLabel("From")).toHaveValue("uk");
+		await expect(dictationPair.getByLabel("To")).toHaveValue("en");
+		// Swap saves straight away; choosing the other side's language swaps too.
+		await dictationPair.getByRole("button", { name: "Swap languages" }).click();
+		await expect(dictationPair.getByLabel("From")).toHaveValue("en");
+		await expect
+			.poll(() => e2eLibrary.settings().translationSourceLanguage)
+			.toBe("en");
+		await expect
+			.poll(() => e2eLibrary.settings().translationTargetLanguage)
+			.toBe("uk");
+		await dictationPair.getByLabel("From").selectOption("uk");
+		await expect(dictationPair.getByLabel("To")).toHaveValue("en");
+		await expect
+			.poll(() => e2eLibrary.settings().translationTargetLanguage)
+			.toBe("en");
+		await page.getByRole("checkbox", { name: "Translation dictation" }).check();
 		await expect(
 			page.getByRole("checkbox", { name: "English" }),
 		).toBeDisabled();
@@ -101,7 +114,9 @@ test("translation dictation and pasted text use the explicit saved language pair
 		expect(transcriptionBody).toContain('"target_language":"en"');
 		expect(transcriptionBody).toContain('"language_hints":["uk"]');
 
-		await page.getByLabel("Translation dictation").uncheck();
+		await page
+			.getByRole("checkbox", { name: "Translation dictation" })
+			.uncheck();
 		await page.getByRole("checkbox", { name: "English" }).check();
 		await expect
 			.poll(() => e2eLibrary.settings().speechLanguageHints)
@@ -116,6 +131,11 @@ test("translation dictation and pasted text use the explicit saved language pair
 		expect(transcriptionBody).toContain('"language_hints":["uk","en"]');
 
 		await page.getByText("Paste-in translation", { exact: true }).click();
+		const pastePair = page.getByRole("group", {
+			name: "Paste-in translation languages",
+		});
+		await expect(pastePair.getByLabel("From")).toHaveValue("uk");
+		await expect(pastePair.getByLabel("To")).toHaveValue("en");
 		await page.getByLabel("Text to translate").fill("Привіт");
 		await page.getByRole("button", { name: "Translate pasted text" }).click();
 		await expect(page.getByLabel("Translation result")).toHaveText(

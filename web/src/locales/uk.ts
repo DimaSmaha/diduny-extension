@@ -128,6 +128,7 @@ export const uk = {
 		listening: "Слухаю…",
 		couldNotStartMicrophone: "Не вдалося увімкнути мікрофон.",
 		copied: "Скопійовано до буфера обміну.",
+		documentCleared: "Документ очищено.",
 		clipboardDenied: "Браузер не дозволив доступ до буфера обміну.",
 		pasteBeforeTranslate: "Спершу вставте текст для перекладу.",
 		translatingPasted: "Перекладаємо вставлений текст…",
@@ -141,10 +142,9 @@ export const uk = {
 		languages: "Мови мовлення",
 		languagesHint: "Нічого не позначено: Diduny визначає мову сам.",
 		languagesInTranslation:
-			"Диктування з перекладом розпізнає мову оригіналу з налаштувань: {source}.",
+			"Диктування з перекладом розпізнає мову, з якої ви перекладаєте: {source}.",
 		translationMode: "Диктування з перекладом",
-		translates: "{source} → {target}",
-		changeLanguages: "Змінити мови",
+		translationLanguages: "Мови диктування з перекладом",
 		document: "Документ диктування",
 		documentPlaceholder:
 			"Тут з’явиться диктування. Ви можете редагувати текст під час роботи.",
@@ -153,6 +153,7 @@ export const uk = {
 		hold: "Утримуйте для запису",
 		cancel: "Скасувати",
 		copy: "Копіювати",
+		clear: "Очистити",
 		microphoneLevel: "Рівень мікрофона",
 		meterSending: "Надсилання",
 		meterIdle: "Очікування",
@@ -162,9 +163,15 @@ export const uk = {
 		pasteTitle: "Переклад вставленого тексту",
 		pasteDescription:
 			"Вставте текст у Diduny для перекладу. Інші програми не зчитуються.",
+		pasteLanguages: "Мови перекладу вставленого тексту",
 		textToTranslate: "Текст для перекладу",
 		translatePasted: "Перекласти вставлений текст",
 		translationResult: "Результат перекладу",
+	},
+	translation: {
+		from: "Звідки",
+		to: "Куди",
+		swap: "Поміняти мови місцями",
 	},
 	liveTranscript: {
 		title: "Поточний текст",
@@ -273,6 +280,18 @@ export const uk = {
 		typingSpeed: "Ваша швидкість друку, слів за хвилину",
 		typingSpeedHint:
 			"Допомагає оцінити, скільки часу заощаджує диктування. Більшість людей друкує приблизно {average} слів за хвилину.",
+		typingPrompt:
+			"Виміряйте швидкість друку: надрукуйте це речення у звичному темпі.",
+		calibrationText: "Ясні думки заслуговують на спокійні слова й уважність.",
+		typingTestText: "Тест друку",
+		typingTestHint:
+			"Таймер починає з першої клавіші й зупиняється на останній.",
+		saveMeasuredSpeed: "Зберегти виміряну швидкість",
+		typingNeedsWords:
+			"Надрукуйте речення, перш ніж зберегти виміряну швидкість.",
+		typingTooFast:
+			"Це швидше за {max} слів за хвилину. Надрукуйте речення, а не вставляйте його.",
+		typingMeasuredSaved: "Виміряно {speed} слів за хвилину, збережено.",
 		saveTypingSpeed: "Зберегти швидкість друку",
 		typingSpeedSaved: "Швидкість друку збережено.",
 		invalidTypingSpeed:

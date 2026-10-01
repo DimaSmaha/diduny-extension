@@ -275,11 +275,12 @@ test("loaded extension signs in through the mock proxy BFF, delivers dictation, 
 		await fixture.locator("#target").focus();
 		await dictate({ mode: "translation" });
 		// Each recording starts below a --- line in the side panel, as in the web app.
-		await expect
-			.poll(() =>
-				panel.locator(".transcript-text").evaluate((node) => node.textContent),
-			)
-			.toBe("Mock transcript\n---\nMock transcript");
+		const panelTranscript = panel.getByLabel("Transcript", { exact: true });
+		await expect(panelTranscript).toHaveValue(
+			"Mock transcript\n---\nMock transcript",
+		);
+		// The panel transcript is editable; later dictation lands below the typed text.
+		await panelTranscript.fill("Typed in the panel");
 		const transcription = mock.transcriptions().at(-1);
 		if (!transcription) throw new Error("Expected extension transcription");
 		expect(transcription).toMatchObject({
@@ -333,6 +334,9 @@ test("loaded extension signs in through the mock proxy BFF, delivers dictation, 
 				);
 			}
 		}
+		await expect(panelTranscript).toHaveValue(
+			/^Typed in the panel\n---\nMock transcript/,
+		);
 
 		await fixture.bringToFront();
 		await fixture.goto(`${fixtureUrl}/fixture/google-docs`);

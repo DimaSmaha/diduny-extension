@@ -85,6 +85,16 @@ test("web dictation cancels safely, uses keyboard and hold controls, and relays 
 		expect(transcriptionRequests).toBe(0);
 		expect(e2eLibrary.savedTexts()).toEqual([]);
 
+		// With the extension installed, Chrome hands its Alt+Shift+V to the
+		// extension, which forwards the press to this tab as a window event.
+		await page.evaluate(() =>
+			window.dispatchEvent(new Event("diduny:dictation-shortcut")),
+		);
+		await expect(page.getByText("Listening…")).toBeVisible();
+		await page.keyboard.press("Escape");
+		await expect(page.getByText("Dictation cancelled.")).toBeVisible();
+		expect(transcriptionRequests).toBe(0);
+
 		await page.getByRole("button", { name: "Start dictation" }).focus();
 		await page.keyboard.press("Enter");
 		await expect(page.getByText("Listening…")).toBeVisible();
@@ -154,6 +164,13 @@ test("web dictation cancels safely, uses keyboard and hold controls, and relays 
 				),
 			)
 			.toBe("Hello from web dictation\n---\nHello from web dictation");
+
+		const clearButton = page.getByRole("button", { name: "Clear" });
+		await clearButton.click();
+		await expect(document).toHaveValue("");
+		await expect(document).toBeFocused();
+		await expect(page.getByText("Document cleared.")).toBeVisible();
+		await expect(clearButton).toBeDisabled();
 	} finally {
 		bff.server.closeAllConnections?.();
 		upstream.server.closeAllConnections?.();

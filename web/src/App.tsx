@@ -25,8 +25,9 @@ import {
 	StartPage,
 	onboardingCompletedStorageKey,
 } from "./Onboarding";
-import { SettingsPane, type SettingsSection } from "./SettingsPane";
+import { SettingsPane } from "./SettingsPane";
 import { AppBar, ThemeToggle } from "./ThemeToggle";
+import { TranslationLanguages } from "./TranslationLanguages";
 import {
 	audioCaptureConstraints,
 	savedMicrophoneUnavailable,
@@ -38,6 +39,7 @@ import {
 import { createPcmCapture } from "./capture";
 import {
 	DEFAULT_SHORTCUT,
+	EXTENSION_DICTATION_EVENT,
 	appendTranscript,
 	firesInTextFields,
 	isEditableTarget,
@@ -82,6 +84,7 @@ import {
 	parseShortcut,
 	shortcutPlatform,
 } from "./shortcut-editor";
+import type { TranslationPair } from "./translation";
 import {
 	buildTranscriptionConfig,
 	translationResultText,
@@ -242,7 +245,6 @@ export function App() {
 	);
 	const [otp, setOtp] = useState("");
 	const [pasteOpen, setPasteOpen] = useState(false);
-	const [settingsFocus, setSettingsFocus] = useState<SettingsSection>();
 	const [signedInEmail, setSignedInEmail] = useState("");
 	const [speechLanguageHints, setSpeechLanguageHints] = useState<
 		readonly string[]
@@ -801,6 +803,10 @@ export function App() {
 	]);
 
 	useEffect(() => {
+		const toggleFromShortcut = () => {
+			if (captureRef.current) void finishCapture();
+			else void startCapture();
+		};
 		const onShortcut = (event: KeyboardEvent) => {
 			if (confirmingSignOut) return;
 			if (event.key === "Escape" && isCommandPaletteOpen) {
@@ -827,11 +833,21 @@ export function App() {
 			)
 				return;
 			event.preventDefault();
-			if (captureRef.current) void finishCapture();
-			else void startCapture();
+			toggleFromShortcut();
+		};
+		const onExtensionShortcut = () => {
+			if (confirmingSignOut || isCommandPaletteOpen) return;
+			toggleFromShortcut();
 		};
 		window.addEventListener("keydown", onShortcut);
-		return () => window.removeEventListener("keydown", onShortcut);
+		window.addEventListener(EXTENSION_DICTATION_EVENT, onExtensionShortcut);
+		return () => {
+			window.removeEventListener("keydown", onShortcut);
+			window.removeEventListener(
+				EXTENSION_DICTATION_EVENT,
+				onExtensionShortcut,
+			);
+		};
 	}, [
 		cancelCapture,
 		closeCommandPalette,
@@ -967,14 +983,26 @@ export function App() {
 		queueMicrotask(() => aboutReturnFocus.current?.focus());
 	}
 
-	function showView(next: WorkspaceView) {
-		setSettingsFocus(undefined);
-		setView(next);
-	}
-
-	function openTranslationSettings() {
-		setSettingsFocus("translation");
-		setView("settings");
+	async function changeTranslationLanguages(pair: TranslationPair) {
+		const previous = {
+			sourceLanguage: translationSourceLanguage,
+			targetLanguage: translationTargetLanguage,
+		};
+		setTranslationSourceLanguage(pair.sourceLanguage);
+		setTranslationTargetLanguage(pair.targetLanguage);
+		try {
+			const settings = await updateWorkspaceSettings({
+				translationSourceLanguage: pair.sourceLanguage,
+				translationTargetLanguage: pair.targetLanguage,
+			});
+			setTranslationSourceLanguage(settings.translationSourceLanguage);
+			setTranslationTargetLanguage(settings.translationTargetLanguage);
+			broadcastWorkspaceChange();
+		} catch (error) {
+			setTranslationSourceLanguage(previous.sourceLanguage);
+			setTranslationTargetLanguage(previous.targetLanguage);
+			setStatus(userErrorMessage(error, t));
+		}
 	}
 
 	async function toggleLanguageHint(code: string, checked: boolean) {
@@ -1001,6 +1029,12 @@ export function App() {
 		} catch {
 			setStatus(t("status.clipboardDenied"));
 		}
+	}
+
+	function clearDocument() {
+		setDocumentText("");
+		setStatus(t("status.documentCleared"));
+		documentInput.current?.focus();
 	}
 
 	async function translatePastedText() {
@@ -1121,6 +1155,10 @@ export function App() {
 	}
 
 	const isRecording = captureState === "recording";
+	const translationPair = {
+		sourceLanguage: translationSourceLanguage,
+		targetLanguage: translationTargetLanguage,
+	};
 	return (
 		<main className="shell workspace">
 			<header>
@@ -1128,7 +1166,7 @@ export function App() {
 					<h1>
 						<button
 							className="brand"
-							onClick={() => showView("dictation")}
+							onClick={() => setView("dictation")}
 							type="button"
 						>
 							{t("app.title")}
@@ -1140,7 +1178,7 @@ export function App() {
 					<nav aria-label={t("app.workspace")}>
 						<button
 							aria-current={view === "dictation" ? "page" : undefined}
-							onClick={() => showView("dictation")}
+							onClick={() => setView("dictation")}
 							type="button"
 						>
 							{t("app.nav.dictation")}
@@ -1148,7 +1186,7 @@ export function App() {
 						<button
 							aria-current={view === "library" ? "page" : undefined}
 							disabled={captureState !== "idle"}
-							onClick={() => showView("library")}
+							onClick={() => setView("library")}
 							type="button"
 						>
 							{t("app.nav.library")}
@@ -1156,7 +1194,7 @@ export function App() {
 						<button
 							aria-current={view === "settings" ? "page" : undefined}
 							disabled={captureState !== "idle"}
-							onClick={() => showView("settings")}
+							onClick={() => setView("settings")}
 							type="button"
 						>
 							{t("app.nav.settings")}
@@ -1165,7 +1203,7 @@ export function App() {
 					<button
 						aria-current={view === "about" ? "page" : undefined}
 						disabled={captureState !== "idle"}
-						onClick={() => showView("about")}
+						onClick={() => setView("about")}
 						ref={aboutReturnFocus}
 						type="button"
 					>
@@ -1207,7 +1245,6 @@ export function App() {
 				/>
 			) : view === "settings" ? (
 				<SettingsPane
-					focusSection={settingsFocus}
 					onSettingsChanged={invalidateWorkspace}
 					revision={workspaceRevision}
 				/>
@@ -1247,7 +1284,6 @@ export function App() {
 					<div className="translation-row">
 						<label className="checkbox" htmlFor="translation-mode">
 							<input
-								aria-describedby="translation-pair"
 								checked={translationMode}
 								disabled={captureState !== "idle"}
 								id="translation-mode"
@@ -1256,20 +1292,13 @@ export function App() {
 							/>
 							{t("dictation.translationMode")}
 						</label>
-						<span className="translation-pair" id="translation-pair">
-							{t("dictation.translates", {
-								source: ownLanguageName(translationSourceLanguage),
-								target: ownLanguageName(translationTargetLanguage),
-							})}
-						</span>
-						<button
-							className="secondary"
+						<TranslationLanguages
 							disabled={captureState !== "idle"}
-							onClick={openTranslationSettings}
-							type="button"
-						>
-							{t("dictation.changeLanguages")}
-						</button>
+							idPrefix="dictation-translation"
+							label={t("dictation.translationLanguages")}
+							onChange={(pair) => void changeTranslationLanguages(pair)}
+							pair={translationPair}
+						/>
 					</div>
 					<textarea
 						aria-label={t("dictation.document")}
@@ -1324,6 +1353,14 @@ export function App() {
 							type="button"
 						>
 							{t("dictation.copy")}
+						</button>
+						<button
+							className="secondary"
+							disabled={!documentText}
+							onClick={clearDocument}
+							type="button"
+						>
+							{t("dictation.clear")}
 						</button>
 					</div>
 					<div className="meter-row">
@@ -1393,6 +1430,13 @@ export function App() {
 						<summary>{t("dictation.pasteTitle")}</summary>
 						<div className="paste-body">
 							<p className="hint">{t("dictation.pasteDescription")}</p>
+							<TranslationLanguages
+								disabled={captureState !== "idle"}
+								idPrefix="paste-translation"
+								label={t("dictation.pasteLanguages")}
+								onChange={(pair) => void changeTranslationLanguages(pair)}
+								pair={translationPair}
+							/>
 							<label htmlFor="translation-text">
 								{t("dictation.textToTranslate")}
 								<textarea

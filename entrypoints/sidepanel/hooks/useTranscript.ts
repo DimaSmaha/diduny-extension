@@ -121,5 +121,19 @@ export function useTranscript() {
 		setTab({ finalText: "", interimText: "" });
 	}, []);
 
-	return { mic, tab, allText, copied, copyToClipboard, clear, history };
+	// Typed edits become the text later dictation chunks append to.
+	const editMic = useCallback((finalText: string) => {
+		setMic((prev) => ({ ...prev, finalText }));
+	}, []);
+
+	return {
+		mic,
+		tab,
+		allText,
+		copied,
+		copyToClipboard,
+		clear,
+		editMic,
+		history,
+	};
 }

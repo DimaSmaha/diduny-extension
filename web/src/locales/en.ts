@@ -129,6 +129,7 @@ export const en = {
 		listening: "Listening…",
 		couldNotStartMicrophone: "Could not start the microphone.",
 		copied: "Copied to clipboard.",
+		documentCleared: "Document cleared.",
 		clipboardDenied: "The browser did not allow clipboard access.",
 		pasteBeforeTranslate: "Paste text before translating it.",
 		translatingPasted: "Translating pasted text…",
@@ -142,10 +143,9 @@ export const en = {
 		languages: "Spoken languages",
 		languagesHint: "Nothing ticked: Diduny detects the language itself.",
 		languagesInTranslation:
-			"Translation dictation listens for {source}, the source language in Settings.",
+			"Translation dictation listens for {source}, the language you translate from.",
 		translationMode: "Translation dictation",
-		translates: "{source} → {target}",
-		changeLanguages: "Change languages",
+		translationLanguages: "Translation dictation languages",
 		document: "Dictation document",
 		documentPlaceholder:
 			"Your dictation appears here. You can edit it while you work.",
@@ -154,6 +154,7 @@ export const en = {
 		hold: "Hold to record",
 		cancel: "Cancel",
 		copy: "Copy",
+		clear: "Clear",
 		microphoneLevel: "Microphone level",
 		meterSending: "Sending",
 		meterIdle: "Idle",
@@ -163,9 +164,15 @@ export const en = {
 		pasteTitle: "Paste-in translation",
 		pasteDescription:
 			"Paste text into Diduny to translate it. Other applications are not read.",
+		pasteLanguages: "Paste-in translation languages",
 		textToTranslate: "Text to translate",
 		translatePasted: "Translate pasted text",
 		translationResult: "Translation result",
+	},
+	translation: {
+		from: "From",
+		to: "To",
+		swap: "Swap languages",
 	},
 	liveTranscript: {
 		title: "Live transcript",
@@ -274,6 +281,17 @@ export const en = {
 		typingSpeed: "Your typing speed, words per minute",
 		typingSpeedHint:
 			"Used to estimate the time dictation saves you. Most people type about {average} words per minute.",
+		typingPrompt:
+			"Measure your typing speed: type this sentence at your normal pace.",
+		calibrationText: "Clear ideas deserve calm words and careful attention.",
+		typingTestText: "Typing test",
+		typingTestHint:
+			"The timer starts with your first key and stops at your last.",
+		saveMeasuredSpeed: "Save measured speed",
+		typingNeedsWords: "Type the sentence before saving your measured speed.",
+		typingTooFast:
+			"That is faster than {max} words per minute. Type the sentence instead of pasting it.",
+		typingMeasuredSaved: "Measured {speed} words per minute and saved it.",
 		saveTypingSpeed: "Save typing speed",
 		typingSpeedSaved: "Typing speed saved.",
 		invalidTypingSpeed:

@@ -37,6 +37,7 @@ import { onMessage, sendMessage } from "../lib/messaging/bridge";
 import type { DictationTranslation, Message } from "../lib/messaging/types";
 import type { RecordingMode, RecordingState } from "../lib/types";
 import { INPUT_TIMING } from "../src/core/constants";
+import { EXTENSION_DICTATION_EVENT } from "../web/src/dictation";
 
 export default defineBackground(() => {
 	let currentState: RecordingState = "idle";
@@ -165,7 +166,11 @@ export default defineBackground(() => {
 	chrome.commands.onCommand.addListener(async (command) => {
 		if (currentState === "recording") {
 			await stopRecording();
-		} else if (
+			return;
+		}
+		if (command === "toggle-recording" && (await forwardDictationToWebApp()))
+			return;
+		if (
 			currentState === "idle" ||
 			currentState === "success" ||
 			currentState === "error"
@@ -181,6 +186,30 @@ export default defineBackground(() => {
 			}
 		}
 	});
+
+	/**
+	 * Chrome gives Alt+Shift+V to the extension on every tab, so the Diduny web
+	 * app never sees the key. On its tab, hand the press back to the page.
+	 */
+	async function forwardDictationToWebApp() {
+		const [tab] = await chrome.tabs.query({
+			active: true,
+			lastFocusedWindow: true,
+		});
+		if (!tab?.id || !tab.url) return false;
+		if (new URL(tab.url).origin !== (await getBffOrigin())) return false;
+		try {
+			await chrome.scripting.executeScript({
+				target: { tabId: tab.id },
+				func: (eventName: string) => window.dispatchEvent(new Event(eventName)),
+				args: [EXTENSION_DICTATION_EVENT],
+			});
+			return true;
+		} catch (err) {
+			logError("bg:forwardDictation", err);
+			return false;
+		}
+	}
 
 	async function handleDictationCommandPress() {
 		const next = nextCommandPress(commandPress, Date.now());

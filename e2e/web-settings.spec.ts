@@ -101,6 +101,39 @@ test("settings: word chips, shortcut toggles, typing speed, instant language swi
 			.toBe(65);
 		await expect(page.getByText("Start typing test")).toHaveCount(0);
 
+		// The typing test times from the first key to the last; a paste takes no time.
+		const typingTest = page.getByRole("textbox", { name: "Typing test" });
+		const saveMeasured = page.getByRole("button", {
+			name: "Save measured speed",
+		});
+		await expect(saveMeasured).toBeDisabled();
+		await typingTest.fill(
+			"Clear ideas deserve calm words and careful attention.",
+		);
+		await saveMeasured.click();
+		await expect(
+			page.getByText("Type the sentence before saving your measured speed."),
+		).toBeVisible();
+		await typingTest.fill("");
+		await typingTest.pressSequentially(
+			"Clear ideas deserve calm words and careful attention.",
+			{ delay: 60 },
+		);
+		await saveMeasured.click();
+		await expect(
+			page.getByText(/^Measured \d+ words per minute/),
+		).toBeVisible();
+		await expect
+			.poll(() => e2eLibrary.settings().typingSpeedWordsPerMinute)
+			.not.toBe(65);
+		const measured = e2eLibrary.settings().typingSpeedWordsPerMinute ?? 0;
+		expect(measured).toBeGreaterThan(0);
+		expect(measured).toBeLessThanOrEqual(300);
+		await expect(
+			page.getByLabel("Your typing speed, words per minute"),
+		).toHaveValue(String(measured));
+		await expect(typingTest).toHaveValue("");
+
 		await expect(page.getByText("Diduny uses", { exact: false })).toBeVisible();
 		await expect(page.getByText("free on this filesystem")).toHaveCount(0);
 		await expect(page.getByText("Data directory")).toHaveCount(0);
