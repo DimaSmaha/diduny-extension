@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inflateRawSync } from "node:zlib";
 import {
@@ -42,6 +45,13 @@ export interface WorkspaceOptions extends WorkspaceLibraryOptions {
 	 * be played back.
 	 */
 	capture?: "fake" | "real";
+	/** A visible window, which real OS input and Chrome's prompts need. */
+	headed?: boolean;
+	/**
+	 * With real capture: show Chrome's real microphone prompt instead of
+	 * accepting it. Uses a regular (persistent) profile, where Chrome asks.
+	 */
+	microphonePrompt?: boolean;
 	microphones?: MicrophoneDoubleOptions;
 	onboardingCompleted?: boolean;
 	signIn?: boolean;
@@ -303,23 +313,42 @@ async function startWorkspace(
 	await bff.listen({ host: "localhost", port: 0 });
 	const bffUrl = serverUrl(bff);
 	const realCapture = options.capture === "real";
-	const browser = await chromium.launch({
+	const launch = {
 		args: realCapture
 			? [
 					"--use-fake-device-for-media-stream",
-					"--use-fake-ui-for-media-stream",
+					...(options.microphonePrompt
+						? []
+						: ["--use-fake-ui-for-media-stream"]),
 					"--autoplay-policy=no-user-gesture-required",
 				]
 			: [],
 		channel: "chromium",
-		headless: true,
-	});
-	const context = await browser.newContext(
-		options.viewport ? { viewport: options.viewport } : {},
-	);
-	await context.grantPermissions(["clipboard-read", "clipboard-write"], {
-		origin: bffUrl,
-	});
+		headless: !options.headed,
+	};
+	// Playwright's throwaway contexts deny the microphone outright, so Chrome
+	// only asks in a regular profile.
+	const userDataDir = options.microphonePrompt
+		? await mkdtemp(join(tmpdir(), "diduny-web-e2e-"))
+		: undefined;
+	const persistent = userDataDir
+		? await chromium.launchPersistentContext(userDataDir, {
+				...launch,
+				...(options.viewport ? { viewport: options.viewport } : {}),
+			})
+		: undefined;
+	const browser = persistent?.browser() ?? (await chromium.launch(launch));
+	const context =
+		persistent ??
+		(await browser.newContext(
+			options.viewport ? { viewport: options.viewport } : {},
+		));
+	// Granting some permissions denies the rest, the microphone included, so
+	// Chrome would never ask; prompt tests leave the clipboard alone.
+	if (!options.microphonePrompt)
+		await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+			origin: bffUrl,
+		});
 	await installSupportedBrowserCapabilities(context, {
 		onboardingCompleted: options.onboardingCompleted ?? true,
 	});
@@ -336,10 +365,11 @@ async function startWorkspace(
 		async close() {
 			bff.server.closeAllConnections?.();
 			mock.server.server.closeAllConnections?.();
-			await browser.close();
+			await (persistent ? persistent.close() : browser.close());
 			await bff.close();
 			await mock.server.close();
 			library.close();
+			if (userDataDir) await rm(userDataDir, { force: true, recursive: true });
 		},
 		context,
 		library,

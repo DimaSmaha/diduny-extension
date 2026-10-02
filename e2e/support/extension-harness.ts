@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -18,6 +18,9 @@ import { TEST_EMAIL, type UpstreamReply, signIn } from "./web-workspace";
 
 export { expect, TEST_EMAIL };
 
+/** Fixed by the manifest key in wxt.config.ts. */
+export const EXTENSION_ID = "gfkbkikhbmdnmpfjekoopknbokbhfldo";
+
 /** Fixture pages the extension types into, served from a localhost origin it may access. */
 const PAGES: Record<string, string> = {
 	plain: '<textarea id="message" aria-label="Message"></textarea>',
@@ -35,6 +38,33 @@ const PAGES: Record<string, string> = {
 		<div id="notes" contenteditable="true" role="textbox" aria-label="Notes"></div>`,
 	"page-b":
 		'<h1>Page B</h1><textarea id="message" aria-label="Message"></textarea>',
+	inputs: `
+		<input aria-label="text input" type="text">
+		<input aria-label="search input" type="search">
+		<input aria-label="url input" type="url">
+		<input aria-label="tel input" type="tel">
+		<input aria-label="email input" type="email">
+		<input aria-label="password input" type="password">
+		<input aria-label="number input" type="number">`,
+	// A field next to an embedded page; ?frame= picks the embedded page's URL.
+	framed: `
+		<textarea id="message" aria-label="Message"></textarea>
+		<iframe title="Embedded page" width="400" height="120"></iframe>
+		<script>
+			document.querySelector("iframe").src =
+				new URLSearchParams(location.search).get("frame") ?? "/page/plain";
+		</script>`,
+	shadow: `
+		<diduny-shadow-field></diduny-shadow-field>
+		<script>
+			customElements.define("diduny-shadow-field", class extends HTMLElement {
+				constructor() {
+					super();
+					this.attachShadow({ mode: "open" }).innerHTML =
+						'<input aria-label="Shadow input" type="text">';
+				}
+			});
+		</script>`,
 	meeting: `
 		<h1>Meeting</h1>
 		<textarea id="chat" aria-label="Chat"></textarea>
@@ -66,12 +96,23 @@ function html(title: string, body: string) {
 
 export interface ExtensionOptions {
 	colorScheme?: "dark" | "light";
+	/** More Chromium switches, e.g. to allow tab capture without a toolbar click. */
+	extraArgs?: readonly string[];
+	/** A visible window, which real OS key presses and Chrome's prompts need. */
+	headed?: boolean;
 	/** Store the permission page's grant up front; false is a fresh install. */
 	micGranted?: boolean;
-	/** "allowed" accepts Chrome's microphone prompt; "blocked" denies every prompt. */
-	microphone?: "allowed" | "blocked";
+	/**
+	 * "allowed" accepts Chrome's microphone prompt through its fake media UI;
+	 * "granted" grants the extension the microphone up front and keeps Chrome's
+	 * real media UI, which tab capture needs; "blocked" denies every prompt;
+	 * "prompt" shows Chrome's real prompt for something to answer it.
+	 */
+	microphone?: "allowed" | "blocked" | "granted" | "prompt";
 	/** The fixture page the first tab shows. */
 	page?: string;
+	/** Pins Diduny to the toolbar, so its button can be clicked for real. */
+	pinExtension?: boolean;
 	panelViewport?: { height: number; width: number };
 	signedIn?: boolean;
 	streamLiveTokens?: boolean;
@@ -205,6 +246,38 @@ export function realtimeConfigs(mock: MockProxy) {
 				return [];
 			}
 		});
+}
+
+/**
+ * Clicks the Diduny toolbar button on `page` through Chrome's DevTools
+ * protocol: like a real click it opens the side panel and grants activeTab
+ * for that tab, which tab capture needs.
+ */
+export async function clickToolbarButton(
+	session: ExtensionSession,
+	page: Page,
+) {
+	// A toolbar click always lands on the active tab; Chrome grants nothing to a background one.
+	await page.bringToFront();
+	const cdp = await session.context.browser()?.newBrowserCDPSession();
+	if (!cdp) throw new Error("Expected a browser to send the click to");
+	try {
+		// Tab targets are left out unless asked for, and the click needs the tab, not its page.
+		const { targetInfos } = await cdp.send("Target.getTargets", {
+			filter: [{ type: "tab" }],
+		});
+		const tabs = targetInfos.filter((target) => target.url === page.url());
+		if (tabs.length !== 1)
+			throw new Error(
+				`Expected one tab showing ${page.url()}, found ${tabs.length}`,
+			);
+		await cdp.send("Extensions.triggerAction", {
+			id: session.extensionId,
+			targetId: tabs[0]?.targetId as string,
+		});
+	} finally {
+		await cdp.detach();
+	}
 }
 
 /** Runs in the background service worker, as Chrome would on a keyboard shortcut. */
@@ -377,20 +450,28 @@ async function startExtension(
 	const bffUrl = serverUrl(bff);
 
 	const userDataDir = await mkdtemp(join(tmpdir(), "diduny-extension-e2e-"));
+	if (options.pinExtension) {
+		await mkdir(join(userDataDir, "Default"));
+		await writeFile(
+			join(userDataDir, "Default", "Preferences"),
+			JSON.stringify({ extensions: { pinned_extensions: [EXTENSION_ID] } }),
+		);
+	}
 	const extensionPath = resolve(".output/chrome-mv3");
+	const microphone = options.microphone ?? "allowed";
 	const context = await chromium.launchPersistentContext(userDataDir, {
 		args: [
 			`--disable-extensions-except=${extensionPath}`,
 			`--load-extension=${extensionPath}`,
 			"--use-fake-device-for-media-stream",
 			"--autoplay-policy=no-user-gesture-required",
-			(options.microphone ?? "allowed") === "allowed"
-				? "--use-fake-ui-for-media-stream"
-				: "--deny-permission-prompts",
+			...(microphone === "allowed" ? ["--use-fake-ui-for-media-stream"] : []),
+			...(microphone === "blocked" ? ["--deny-permission-prompts"] : []),
+			...(options.extraArgs ?? []),
 		],
 		channel: "chromium",
 		colorScheme: options.colorScheme ?? "light",
-		headless: true,
+		headless: !options.headed,
 	});
 	const close = async () => {
 		await context.close();
@@ -429,6 +510,17 @@ async function startExtension(
 			await panel.setViewportSize(options.panelViewport);
 		await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`);
 		if (options.signedIn ?? true) await panelSignedIn(panel);
+		if (microphone === "granted") {
+			// Playwright refuses permissions for chrome-extension:// origins; the
+			// browser itself does not. Chrome drops the grant when this session
+			// detaches, so it stays open until the browser closes.
+			const cdp = await context.browser()?.newBrowserCDPSession();
+			await cdp?.send("Browser.setPermission", {
+				origin: `chrome-extension://${EXTENSION_ID}`,
+				permission: { name: "microphone" },
+				setting: "granted",
+			});
+		}
 		await fixture.bringToFront();
 
 		return {
