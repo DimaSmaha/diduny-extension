@@ -4,6 +4,7 @@ import {
 	errorFromResponse,
 	isIncorrectOtpError,
 	isInvalidEmailError,
+	pastedTranslationErrorMessage,
 	userErrorMessage,
 } from "./errors";
 import { createI18n } from "./i18n";
@@ -86,4 +87,29 @@ test("recognises a refused one-time code apart from an expired session or outage
 			errorFromResponse(502, { error: "upstream_auth_unavailable" }),
 		),
 	).toBeFalse();
+});
+
+test("words paste-in translation failures for the paste panel", () => {
+	const i18n = createI18n("en");
+	const t = i18n.t.bind(i18n);
+
+	expect(
+		pastedTranslationErrorMessage(new DidunyError("empty_result"), t),
+	).toBe(
+		"The translation returned no text. Check the language pair and try again.",
+	);
+	for (const error of [
+		errorFromResponse(500, { error: "upstream_failed" }),
+		new DidunyError("local_process_unreachable"),
+		new Error("network"),
+	])
+		expect(pastedTranslationErrorMessage(error, t)).toBe(
+			"Could not translate the pasted text. Check the Diduny service and try again.",
+		);
+	expect(
+		pastedTranslationErrorMessage(
+			errorFromResponse(402, { limitHours: 2, usedHours: 2 }),
+			t,
+		),
+	).toContain("out of hours");
 });

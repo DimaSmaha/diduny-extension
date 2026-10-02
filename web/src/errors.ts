@@ -84,3 +84,16 @@ export function userErrorMessage(error: unknown, t: Translate) {
 		return t("errors.remoteAcquisitionUnavailableOnWeb");
 	return t("errors.requestRejected");
 }
+
+/** Paste-in translation failures, worded for the paste panel. */
+export function pastedTranslationErrorMessage(error: unknown, t: Translate) {
+	const code = typedCode(error);
+	if (code === "empty_result") return t("status.translationNoText");
+	if (
+		code === undefined ||
+		code === "local_process_unreachable" ||
+		code === "request_rejected"
+	)
+		return t("status.couldNotTranslate");
+	return userErrorMessage(error, t);
+}

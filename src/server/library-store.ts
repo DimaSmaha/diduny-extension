@@ -37,6 +37,7 @@ import type {
 	RetentionCategory,
 	RetentionPolicy,
 } from "../core/ports";
+import { UNTITLED_RECORDING_TITLE } from "../core/ports";
 import {
 	DEFAULT_SETTINGS,
 	type Settings,
@@ -465,7 +466,7 @@ export class LibraryStore implements LibraryPort {
 			.all(...values);
 		const items = rows.map((row) => ({
 			createdAt: row.createdAt,
-			displayTitle: row.title?.trim() || "Untitled recording",
+			displayTitle: row.title?.trim() || UNTITLED_RECORDING_TITLE,
 			durationSeconds: row.durationSeconds,
 			hasTranslation: row.hasTranslation === 1,
 			id: row.id,

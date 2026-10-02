@@ -14,7 +14,11 @@ import {
 	normalizeEmail,
 	normalizeOtp,
 } from "../../src/core/auth-validation";
-import { AUDIO_FORMAT, WEB_LATENCY_TARGET_MS } from "../../src/core/constants";
+import {
+	AUDIO_FORMAT,
+	WEB_LATENCY_TARGET_MS,
+	WEB_TRANSCRIPTION_TIMEOUT,
+} from "../../src/core/constants";
 import type { RealtimeToken } from "../../src/core/realtime-session";
 import { DEFAULT_SETTINGS } from "../../src/core/settings";
 import { createSpeechPreCheckAccumulator } from "../../src/core/speech-precheck";
@@ -31,6 +35,7 @@ import { AppBar, ThemeToggle } from "./ThemeToggle";
 import { TranslationLanguages } from "./TranslationLanguages";
 import {
 	audioCaptureConstraints,
+	microphoneStartFailureKey,
 	savedMicrophoneUnavailable,
 } from "./audio-devices";
 import {
@@ -52,9 +57,10 @@ import {
 	isIncorrectOtpError,
 	isInvalidEmailError,
 	localProcessUnavailable,
+	pastedTranslationErrorMessage,
 	userErrorMessage,
 } from "./errors";
-import i18n, { setUiLocale } from "./i18n";
+import i18n, { setUiLocale, supportedUiLocales } from "./i18n";
 import { createWorkspaceInvalidationBus } from "./invalidation";
 import { dictationLanguages, ownLanguageName } from "./languages";
 import { saveToLibrary } from "./library";
@@ -89,6 +95,7 @@ import {
 import type { TranslationPair } from "./translation";
 import {
 	buildTranscriptionConfig,
+	translationChunks,
 	translationResultText,
 	translationUrl,
 } from "./translation";
@@ -156,6 +163,40 @@ function realtimeResultWithinBudget(result: Promise<string>) {
 			},
 		);
 	});
+}
+
+const draftStorageKey = "diduny.dictation.document";
+
+/** The document survives a reload and Back/Forward in this tab. */
+function readDraft() {
+	try {
+		return sessionStorage.getItem(draftStorageKey) ?? "";
+	} catch {
+		return "";
+	}
+}
+
+function saveDraft(text: string) {
+	try {
+		if (text) sessionStorage.setItem(draftStorageKey, text);
+		else sessionStorage.removeItem(draftStorageKey);
+	} catch {
+		// Storage can be unavailable (private mode, quota); the document stays in memory.
+	}
+}
+
+/** Each view has a history entry, so browser Back and Forward move between views. */
+function viewFromLocation(): WorkspaceView {
+	const view = window.location.hash.replace(/^#/, "");
+	return view === "about" || view === "library" || view === "settings"
+		? view
+		: "dictation";
+}
+
+function viewUrl(view: WorkspaceView) {
+	return view === "dictation"
+		? `${window.location.pathname}${window.location.search}`
+		: `#${view}`;
 }
 
 function releaseCapture(capture: ActiveCapture) {
@@ -227,7 +268,7 @@ export function App() {
 	const [announceLiveTranscript, setAnnounceLiveTranscript] = useState(false);
 	const [captureState, setCaptureState] = useState<CaptureState>("idle");
 	const [confirmingSignOut, setConfirmingSignOut] = useState(false);
-	const [documentText, setDocumentText] = useState("");
+	const [documentText, setDocumentText] = useState(readDraft);
 	const [dictationShortcut, setDictationShortcut] = useState(DEFAULT_SHORTCUT);
 	const [email, setEmail] = useState("");
 	const [emailError, setEmailError] = useState("");
@@ -247,7 +288,12 @@ export function App() {
 	);
 	const [otp, setOtp] = useState("");
 	const [otpError, setOtpError] = useState("");
+	const [pasteMessage, setPasteMessage] = useState<{
+		failed: boolean;
+		text: string;
+	} | null>(null);
 	const [pasteOpen, setPasteOpen] = useState(false);
+	const [settingsLoaded, setSettingsLoaded] = useState(false);
 	const [signedInEmail, setSignedInEmail] = useState("");
 	const [speechLanguageHints, setSpeechLanguageHints] = useState<
 		readonly string[]
@@ -260,10 +306,18 @@ export function App() {
 	const [translationTargetLanguage, setTranslationTargetLanguage] =
 		useState("en");
 	const [translationText, setTranslationText] = useState("");
-	const [view, setView] = useState<WorkspaceView>("dictation");
+	const [translating, setTranslating] = useState(false);
+	const [uploading, setUploading] = useState(false);
+	const [view, setView] = useState<WorkspaceView>(viewFromLocation);
 	const [workspaceRevision, setWorkspaceRevision] = useState(0);
+	const busyRef = useRef(false);
 	const captureRef = useRef<ActiveCapture | null>(null);
+	const controlsRef = useRef<HTMLDivElement>(null);
 	const documentInput = useRef<HTMLTextAreaElement>(null);
+	const emailInput = useRef<HTMLInputElement>(null);
+	const focusEmailAfterSignOut = useRef(false);
+	const pasteRequest = useRef(0);
+	const uploadRef = useRef<AbortController | null>(null);
 	const holdCaptureRef = useRef(false);
 	const aboutReturnFocus = useRef<HTMLButtonElement>(null);
 	const paletteReturnFocus = useRef<HTMLElement | null>(null);
@@ -373,6 +427,31 @@ export function App() {
 		return () => document.removeEventListener("visibilitychange", flushScratch);
 	}, []);
 
+	useEffect(() => saveDraft(documentText), [documentText]);
+
+	useEffect(() => {
+		busyRef.current = captureState !== "idle";
+	}, [captureState]);
+
+	useEffect(() => {
+		const onPopState = () => {
+			// Switching views while recording or transcribing would hide it, as the nav buttons do; stay on Dictation.
+			if (busyRef.current) {
+				window.history.pushState(null, "", viewUrl("dictation"));
+				return;
+			}
+			setView(viewFromLocation());
+		};
+		window.addEventListener("popstate", onPopState);
+		return () => window.removeEventListener("popstate", onPopState);
+	}, []);
+
+	useEffect(() => {
+		if (authState !== "signed-out" || !focusEmailAfterSignOut.current) return;
+		focusEmailAfterSignOut.current = false;
+		emailInput.current?.focus();
+	}, [authState]);
+
 	const refreshSession = useCallback(async () => {
 		try {
 			const session = await bffJson<SessionResponse>("/bff/auth/session");
@@ -456,7 +535,19 @@ export function App() {
 
 	useEffect(() => {
 		void workspaceRevision;
+		// "Ready to dictate." was set before the saved interface language arrived; say it again in that language.
+		const retranslateIdleStatus = () =>
+			setStatus((current) => {
+				for (const key of ["status.ready", "status.signIn"]) {
+					const spoken = supportedUiLocales.some(
+						(locale) => i18n.t(key, { lng: locale }) === current,
+					);
+					if (spoken) return i18n.t(key);
+				}
+				return current;
+			});
 		if (authState !== "signed-in") {
+			setSettingsLoaded(false);
 			setAnnounceLiveTranscript(false);
 			setDictationShortcut(DEFAULT_SHORTCUT);
 			setMicrophoneDeviceId(null);
@@ -474,7 +565,8 @@ export function App() {
 				setSpeechLanguageHints(settings.speechLanguageHints);
 				setTranslationSourceLanguage(settings.translationSourceLanguage);
 				setTranslationTargetLanguage(settings.translationTargetLanguage);
-				void setUiLocale(settings.uiLocale);
+				setSettingsLoaded(true);
+				void setUiLocale(settings.uiLocale).then(retranslateIdleStatus);
 			})
 			.catch(() => {
 				setAnnounceLiveTranscript(false);
@@ -483,7 +575,8 @@ export function App() {
 				setSpeechLanguageHints(DEFAULT_SETTINGS.speechLanguageHints);
 				setTranslationSourceLanguage("uk");
 				setTranslationTargetLanguage("en");
-				void setUiLocale("en");
+				setSettingsLoaded(true);
+				void setUiLocale("en").then(retranslateIdleStatus);
 			});
 	}, [authState, workspaceRevision]);
 
@@ -519,6 +612,19 @@ export function App() {
 		const capture = captureRef.current;
 		if (!capture) return;
 		captureRef.current = null;
+		// Stop (or Hold) is disabled while transcribing, which would drop focus to the page; keep typing in the document.
+		const focused = document.activeElement;
+		const input = documentInput.current;
+		if (
+			input &&
+			(!focused ||
+				focused === document.body ||
+				controlsRef.current?.contains(focused))
+		) {
+			input.focus();
+			input.setSelectionRange(input.value.length, input.value.length);
+		}
+		let upload: AbortController | undefined;
 		setCaptureState("sending");
 		setStatus(t("status.transcribing"));
 		try {
@@ -583,11 +689,28 @@ export function App() {
 						{ type: "text/plain" },
 					),
 				);
-				const result = await bffJson<TranscriptionResponse>(
-					"/bff/api/transcriptions",
-					{ body: form, method: "POST" },
+				// Without a time limit a request that never answers would leave every control disabled.
+				upload = new AbortController();
+				const activeUpload = upload;
+				uploadRef.current = activeUpload;
+				setUploading(true);
+				const timeout = window.setTimeout(
+					() => activeUpload.abort("timeout"),
+					WEB_TRANSCRIPTION_TIMEOUT.baseMs +
+						recording.durationSeconds *
+							WEB_TRANSCRIPTION_TIMEOUT.perRecordedSecondMs,
 				);
-				transcriptionText = result.text;
+				try {
+					const result = await bffJson<TranscriptionResponse>(
+						"/bff/api/transcriptions",
+						{ body: form, method: "POST", signal: activeUpload.signal },
+					);
+					transcriptionText = result.text;
+				} finally {
+					window.clearTimeout(timeout);
+					uploadRef.current = null;
+					setUploading(false);
+				}
 			}
 			if (!transcriptionText?.trim()) {
 				setStatus(t("status.noText"));
@@ -627,7 +750,16 @@ export function App() {
 					}
 				});
 		} catch (error) {
-			setStatus(userErrorMessage(error, t));
+			if (upload?.signal.reason === "cancel") {
+				await capture.scratch.discard().catch(() => undefined);
+				setStatus(t("status.transcriptionCancelled"));
+				return;
+			}
+			setStatus(
+				upload?.signal.reason === "timeout"
+					? t("status.transcriptionTimedOut")
+					: userErrorMessage(error, t),
+			);
 			queueMicrotask(() => statusElement.current?.focus());
 		} finally {
 			releaseCapture(capture);
@@ -651,6 +783,11 @@ export function App() {
 		t,
 	]);
 
+	/** Escape or Cancel while the completed recording is being transcribed. */
+	const cancelTranscription = useCallback(() => {
+		uploadRef.current?.abort("cancel");
+	}, []);
+
 	const startCapture = useCallback(async () => {
 		if (captureRef.current || captureState === "sending") return;
 		if (!navigator.mediaDevices?.getUserMedia || !("MediaRecorder" in window)) {
@@ -662,6 +799,21 @@ export function App() {
 		let realtime: WebRealtimeSession | undefined;
 		let scratch: ScratchCapture | undefined;
 		let fallbackDeviceName: string | undefined;
+		// The browser's reason the microphone did not open, so the message can say what to do.
+		let microphoneError: unknown;
+		const openMicrophone = (deviceId: string | null) =>
+			navigator.mediaDevices
+				.getUserMedia({ audio: audioCaptureConstraints(deviceId) })
+				.then(
+					(opened) => {
+						microphoneError = undefined;
+						return opened;
+					},
+					(error: unknown) => {
+						microphoneError = error;
+						throw error;
+					},
+				);
 		try {
 			const release = await acquireRecordingLock();
 			if (!release) {
@@ -670,15 +822,11 @@ export function App() {
 			}
 			recordingLockReleaseRef.current = release;
 			try {
-				stream = await navigator.mediaDevices.getUserMedia({
-					audio: audioCaptureConstraints(microphoneDeviceId),
-				});
+				stream = await openMicrophone(microphoneDeviceId);
 			} catch (error) {
 				if (!microphoneDeviceId || !savedMicrophoneUnavailable(error))
 					throw error;
-				stream = await navigator.mediaDevices.getUserMedia({
-					audio: audioCaptureConstraints(null),
-				});
+				stream = await openMicrophone(null);
 				fallbackDeviceName =
 					stream.getAudioTracks()[0]?.label || "another available microphone";
 			}
@@ -790,7 +938,13 @@ export function App() {
 			stopHoldWhenReadyRef.current = false;
 			setHolding(false);
 			releaseRecordingLock();
-			setStatus(t("status.couldNotStartMicrophone"));
+			setStatus(
+				t(
+					microphoneError
+						? microphoneStartFailureKey(microphoneError)
+						: "status.couldNotStartMicrophone",
+				),
+			);
 		}
 	}, [
 		captureState,
@@ -828,6 +982,11 @@ export function App() {
 				void cancelCapture();
 				return;
 			}
+			if (event.key === "Escape" && uploadRef.current) {
+				event.preventDefault();
+				cancelTranscription();
+				return;
+			}
 			if (
 				event.repeat ||
 				!matchesDictationShortcut(event, dictationShortcut) ||
@@ -853,6 +1012,7 @@ export function App() {
 		};
 	}, [
 		cancelCapture,
+		cancelTranscription,
 		closeCommandPalette,
 		confirmingSignOut,
 		dictationShortcut,
@@ -985,10 +1145,18 @@ export function App() {
 			method: "POST",
 		});
 		clearSignInFields();
+		window.history.replaceState(null, "", viewUrl("dictation"));
 		setView("dictation");
+		focusEmailAfterSignOut.current = true;
 		setAuthState("signed-out");
 		setSignedInEmail("");
 		setStatus(t("auth.signedOut"));
+	}
+
+	function showView(next: WorkspaceView) {
+		if (next === view) return;
+		window.history.pushState(null, "", viewUrl(next));
+		setView(next);
 	}
 
 	function cancelSignOut() {
@@ -997,7 +1165,7 @@ export function App() {
 	}
 
 	function closeAboutDelivery() {
-		setView("dictation");
+		showView("dictation");
 		queueMicrotask(() => aboutReturnFocus.current?.focus());
 	}
 
@@ -1050,33 +1218,46 @@ export function App() {
 	}
 
 	function clearDocument() {
-		setDocumentText("");
+		const input = documentInput.current;
+		input?.focus();
+		input?.select();
+		// Deleting through the browser's editing command keeps its undo history, so Ctrl+Z brings the text back.
+		if (!input || !document.execCommand("delete")) setDocumentText("");
 		setStatus(t("status.documentCleared"));
-		documentInput.current?.focus();
 	}
 
 	async function translatePastedText() {
 		if (!translationText.trim()) {
-			setStatus(t("status.pasteBeforeTranslate"));
+			setPasteMessage({ failed: true, text: t("status.pasteBeforeTranslate") });
 			return;
 		}
-		setStatus(t("status.translatingPasted"));
+		const request = ++pasteRequest.current;
+		const pair = {
+			sourceLanguage: translationSourceLanguage,
+			targetLanguage: translationTargetLanguage,
+		};
+		// The old result must not pass for the translation of the new text.
+		setTranslationResult("");
+		setTranslating(true);
+		setPasteMessage({ failed: false, text: t("status.translatingPasted") });
 		try {
-			const result = await bffJson<unknown>(
-				translationUrl(translationText, {
-					sourceLanguage: translationSourceLanguage,
-					targetLanguage: translationTargetLanguage,
-				}),
-			);
-			const text = translationResultText(result);
-			if (!text) {
-				setStatus(t("status.translationNoText"));
-				return;
+			// Long text goes in parts: each request carries its text in the URL.
+			let translated = "";
+			for (const chunk of translationChunks(translationText)) {
+				const result = await bffJson<unknown>(translationUrl(chunk.text, pair));
+				if (request !== pasteRequest.current) return;
+				translated += translationResultText(result) + chunk.gap;
 			}
-			setTranslationResult(text);
-			setStatus(t("status.pastedTranslated"));
+			setTranslationResult(translated.trim());
+			setPasteMessage({ failed: false, text: t("status.pastedTranslated") });
 		} catch (error) {
-			setStatus(userErrorMessage(error, t));
+			if (request !== pasteRequest.current) return;
+			setPasteMessage({
+				failed: true,
+				text: pastedTranslationErrorMessage(error, t),
+			});
+		} finally {
+			if (request === pasteRequest.current) setTranslating(false);
 		}
 	}
 
@@ -1156,6 +1337,7 @@ export function App() {
 								setEmail(event.target.value);
 								setEmailError("");
 							}}
+							ref={emailInput}
 							required
 							spellCheck={false}
 							type="text"
@@ -1195,7 +1377,7 @@ export function App() {
 					<h1>
 						<button
 							className="brand"
-							onClick={() => setView("dictation")}
+							onClick={() => showView("dictation")}
 							type="button"
 						>
 							{t("app.title")}
@@ -1207,7 +1389,7 @@ export function App() {
 					<nav aria-label={t("app.workspace")}>
 						<button
 							aria-current={view === "dictation" ? "page" : undefined}
-							onClick={() => setView("dictation")}
+							onClick={() => showView("dictation")}
 							type="button"
 						>
 							{t("app.nav.dictation")}
@@ -1215,7 +1397,7 @@ export function App() {
 						<button
 							aria-current={view === "library" ? "page" : undefined}
 							disabled={captureState !== "idle"}
-							onClick={() => setView("library")}
+							onClick={() => showView("library")}
 							type="button"
 						>
 							{t("app.nav.library")}
@@ -1223,7 +1405,7 @@ export function App() {
 						<button
 							aria-current={view === "settings" ? "page" : undefined}
 							disabled={captureState !== "idle"}
-							onClick={() => setView("settings")}
+							onClick={() => showView("settings")}
 							type="button"
 						>
 							{t("app.nav.settings")}
@@ -1232,7 +1414,7 @@ export function App() {
 					<button
 						aria-current={view === "about" ? "page" : undefined}
 						disabled={captureState !== "idle"}
-						onClick={() => setView("about")}
+						onClick={() => showView("about")}
 						ref={aboutReturnFocus}
 						type="button"
 					>
@@ -1338,7 +1520,10 @@ export function App() {
 						value={documentText}
 					/>
 					{/* While a hold is active only its button stays visible; the others keep their space so it never moves. */}
-					<div className={holding ? "controls holding" : "controls"}>
+					<div
+						className={holding ? "controls holding" : "controls"}
+						ref={controlsRef}
+					>
 						{/* Both labels share one cell, so switching to "Stop" never resizes the button and shifts the hold button. */}
 						<button
 							className="toggle"
@@ -1362,8 +1547,10 @@ export function App() {
 							{t("dictation.hold")}
 						</button>
 						<button
-							disabled={!isRecording}
-							onClick={() => void cancelCapture()}
+							disabled={!isRecording && !uploading}
+							onClick={() =>
+								isRecording ? void cancelCapture() : cancelTranscription()
+							}
 							type="button"
 						>
 							{t("dictation.cancel")}
@@ -1419,18 +1606,21 @@ export function App() {
 						>
 							{status}
 						</p>
+						{/* Until the saved settings arrive the shortcut is unknown; showing the default would be wrong. */}
 						<p className="shortcut">
-							{t(
-								firesInTextFields(dictationShortcut)
-									? "dictation.shortcut"
-									: "dictation.shortcutOutsideFields",
-								{
-									shortcut: displayShortcut(
-										parseShortcut(dictationShortcut),
-										shortcutPlatform(),
-									),
-								},
-							)}
+							{settingsLoaded
+								? t(
+										firesInTextFields(dictationShortcut)
+											? "dictation.shortcut"
+											: "dictation.shortcutOutsideFields",
+										{
+											shortcut: displayShortcut(
+												parseShortcut(dictationShortcut),
+												shortcutPlatform(),
+											),
+										},
+									)
+								: null}
 						</p>
 					</div>
 					{captureState !== "idle" && !pictureInPictureContainer ? (
@@ -1475,12 +1665,20 @@ export function App() {
 								/>
 							</label>
 							<button
-								disabled={!translationText.trim()}
+								disabled={!translationText.trim() || translating}
 								onClick={() => void translatePastedText()}
 								type="button"
 							>
 								{t("dictation.translatePasted")}
 							</button>
+							<p
+								aria-live="polite"
+								className={
+									pasteMessage?.failed ? "status field-error" : "status"
+								}
+							>
+								{pasteMessage?.text}
+							</p>
 							<output
 								aria-label={t("dictation.translationResult")}
 								className="translation-result"

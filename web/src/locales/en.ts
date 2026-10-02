@@ -93,7 +93,7 @@ export const en = {
 			title: "Where your words end up",
 			body: "Diduny listens while you speak and writes what it hears into a text box on this page. When you stop, the text is there, ready to edit. Press Copy, then paste it wherever you were going - your email, your editor, a chat window. A web page can't type into other applications, so Diduny won't put text into the window you had open before. That's a limit of the browser, not a feature we skipped. What you get instead is a page you can dictate into all day: keep talking, keep appending, edit as you go, and copy when you're ready.",
 			extension:
-				"A browser extension is coming in the next release. It will let Diduny put your words straight into whatever page you're typing in - no copying, no switching tabs.",
+				"With the Diduny browser extension, your words go straight into the text field you are typing in on other pages - no copying, no switching tabs. Sign in here once so the extension can use this browser.",
 			clipboardNote:
 				"Diduny never writes to your clipboard on its own. Nothing is copied unless you press Copy, so whatever you copied five minutes ago is still there.",
 		},
@@ -131,6 +131,16 @@ export const en = {
 			"Saved microphone is unavailable. Recording with {device}.",
 		listening: "Listening…",
 		couldNotStartMicrophone: "Could not start the microphone.",
+		microphoneBlocked:
+			"Microphone access is blocked. Open this site’s settings in your browser, allow Microphone, then try again.",
+		microphoneNotFound:
+			"No microphone was found. Connect a microphone, then try again.",
+		microphoneBusy:
+			"The microphone is in use by another app or could not be opened. Close the other app, then try again.",
+		transcriptionTimedOut:
+			"Transcription took too long and was stopped. Your document is unchanged; dictate again to retry.",
+		transcriptionCancelled:
+			"Transcription cancelled. Your document is unchanged.",
 		copied: "Copied to clipboard.",
 		documentCleared: "Document cleared.",
 		clipboardDenied: "The browser did not allow clipboard access.",
@@ -224,7 +234,7 @@ export const en = {
 		reset: "Reset settings",
 		resetConfirm: {
 			title: "Reset settings?",
-			body: "Cleanup words, interface language, accessibility, microphone, keyboard shortcut, translation languages, and typing speed go back to their defaults. Retention and your library stay as they are.",
+			body: "Cleanup words, interface language, accessibility, microphone, keyboard shortcut, translation languages, spoken languages, and typing speed go back to their defaults. Retention and your library stay as they are.",
 			confirm: "Reset settings",
 			cancel: "Cancel",
 		},
@@ -262,6 +272,8 @@ export const en = {
 		shortcutNeedsKey: "Press a key to finish the shortcut.",
 		saveShortcut: "Save shortcut",
 		invalidShortcut: "Choose a key for the shortcut.",
+		commandPaletteShortcut:
+			"{shortcut} opens the command palette and cannot be used.",
 		reservedShortcut:
 			"{shortcut} is reserved by this browser and cannot be used.",
 		shortcutSaved: "Shortcut saved: {shortcut}.",
@@ -270,6 +282,8 @@ export const en = {
 		translationTarget: "Translation target language",
 		saveTranslation: "Save translation languages",
 		translationSaved: "Translation languages saved.",
+		sameTranslationLanguages:
+			"Choose two different languages to translate between.",
 		retentionTitle: "Retention",
 		neverSaveDescription:
 			"With retention set to never, Diduny saves no recording and no transcript - nothing is written to your library at all. While you're actually speaking, audio is buffered in a temporary file so a crashed tab doesn't lose what you said. That file is deleted as soon as the recording finishes.",
@@ -277,7 +291,8 @@ export const en = {
 		meetings: "Meetings",
 		retentionSaved: "Retention policy saved.",
 		statisticsTitle: "Dictation statistics",
-		visibleWords: "{count} visible dictation words.",
+		visibleWords:
+			"{count, plural, one {# visible dictation word.} other {# visible dictation words.}}",
 		dictated: "{duration} dictated.",
 		timeSaved: "{duration} saved",
 		slowerThanTyping: "{duration} slower than typing",
@@ -292,6 +307,7 @@ export const en = {
 			"The timer starts with your first key and stops at your last.",
 		saveMeasuredSpeed: "Save measured speed",
 		typingNeedsWords: "Type the sentence before saving your measured speed.",
+		typingMismatch: "Type the sentence exactly as shown to measure your speed.",
 		typingTooFast:
 			"That is faster than {max} words per minute. Type the sentence instead of pasting it.",
 		typingMeasuredSaved: "Measured {speed} words per minute and saved it.",

@@ -9,7 +9,10 @@ import { useTranslation } from "react-i18next";
 import { wordCount } from "../../src/core/models";
 import type { RetentionCategory, RetentionPolicy } from "../../src/core/ports";
 import { DEFAULT_TYPING_SPEED_WPM } from "../../src/core/settings";
-import { isReservedShortcut } from "../../src/core/shortcuts";
+import {
+	isReservedShortcut,
+	normalizeShortcut,
+} from "../../src/core/shortcuts";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ShortcutField } from "./ShortcutField";
 import { TermListInput } from "./TermListInput";
@@ -18,6 +21,7 @@ import {
 	microphonePermissionFailure,
 	resolveAudioInput,
 } from "./audio-devices";
+import { COMMAND_PALETTE_SHORTCUT } from "./dictation";
 import { userErrorMessage } from "./errors";
 import {
 	type UiLocale,
@@ -82,6 +86,31 @@ function errorMessage(
 	return userErrorMessage(error, t);
 }
 
+/** Where a save confirmation or error shows: next to the section it belongs to. */
+type NoticeSection =
+	| "accessibility"
+	| "cleanup"
+	| "interfaceLanguage"
+	| "microphone"
+	| "page"
+	| "reset"
+	| "retention"
+	| "shortcut"
+	| "statistics"
+	| "translation";
+
+interface Notice {
+	section: NoticeSection;
+	text: string;
+}
+
+const punctuationAndSpaces = /[\p{P}\s]+/gu;
+
+/** The typed test text and the sentence compare without case, spacing, or punctuation. */
+function sentenceWords(value: string) {
+	return value.replace(punctuationAndSpaces, " ").trim().toLocaleLowerCase();
+}
+
 type MicrophoneAccess =
 	| "checking"
 	| "denied"
@@ -90,9 +119,13 @@ type MicrophoneAccess =
 	| "unsupported";
 
 function MicrophoneSettings({
+	message,
+	onMessage,
 	onSave,
 	savedDeviceId,
 }: {
+	message: string;
+	onMessage(text: string): void;
 	onSave(deviceId: string | null): Promise<void>;
 	savedDeviceId: string | null;
 }) {
@@ -101,7 +134,6 @@ function MicrophoneSettings({
 	const [devices, setDevices] = useState<ReturnType<typeof audioInputDevices>>(
 		[],
 	);
-	const [message, setMessage] = useState("");
 	const { device, savedDeviceMissing } = resolveAudioInput(
 		devices,
 		savedDeviceId,
@@ -147,7 +179,7 @@ function MicrophoneSettings({
 			setAccess("unsupported");
 			return;
 		}
-		setMessage(t("microphone.requesting"));
+		onMessage(t("microphone.requesting"));
 		try {
 			const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 			for (const track of stream.getTracks()) track.stop();
@@ -155,21 +187,21 @@ function MicrophoneSettings({
 			setDevices(
 				audioInputDevices(await navigator.mediaDevices.enumerateDevices()),
 			);
-			setMessage(t("microphone.granted"));
+			onMessage(t("microphone.granted"));
 		} catch (error) {
 			setAccess(
 				microphonePermissionFailure(error) === "denied" ? "denied" : "prompt",
 			);
-			setMessage(errorMessage(error, t));
+			onMessage(errorMessage(error, t));
 		}
 	}
 
 	async function saveDevice(value: string) {
 		try {
 			await onSave(value || null);
-			setMessage(t("microphone.preferenceSaved"));
+			onMessage(t("microphone.preferenceSaved"));
 		} catch (error) {
-			setMessage(errorMessage(error, t));
+			onMessage(errorMessage(error, t));
 		}
 	}
 
@@ -244,7 +276,7 @@ export function SettingsPane({
 	const [confirmingReset, setConfirmingReset] = useState(false);
 	const [fillerWords, setFillerWords] = useState<readonly string[]>([]);
 	const [lexicon, setLexicon] = useState<readonly string[]>([]);
-	const [message, setMessage] = useState("");
+	const [notice, setNotice] = useState<Notice | null>(null);
 	const [shortcut, setShortcut] = useState<ShortcutParts>({
 		key: "",
 		modifiers: [],
@@ -261,6 +293,9 @@ export function SettingsPane({
 	const typingTestTiming = useRef<{ firstAt: number; lastAt: number } | null>(
 		null,
 	);
+	// One notice at a time, shown in its own section, so an earlier save's message never lingers.
+	const say = (section: NoticeSection, text: string) =>
+		setNotice({ section, text });
 
 	const refresh = useCallback(async () => {
 		try {
@@ -282,7 +317,10 @@ export function SettingsPane({
 			setTranslationSourceLanguage(next.settings.translationSourceLanguage);
 			setTranslationTargetLanguage(next.settings.translationTargetLanguage);
 		} catch (error) {
-			setMessage(errorMessage(error, i18n.t.bind(i18n)));
+			setNotice({
+				section: "page",
+				text: errorMessage(error, i18n.t.bind(i18n)),
+			});
 		}
 	}, []);
 
@@ -302,10 +340,10 @@ export function SettingsPane({
 			setSnapshot((current) => (current ? { ...current, settings } : current));
 			setFillerWords(settings.fillerWords);
 			setLexicon(settings.protectedLexicon);
-			setMessage(t("settings.cleanupSaved"));
+			say("cleanup", t("settings.cleanupSaved"));
 			onSettingsChanged();
 		} catch (error) {
-			setMessage(errorMessage(error, t));
+			say("cleanup", errorMessage(error, t));
 		}
 	}
 
@@ -316,35 +354,41 @@ export function SettingsPane({
 		try {
 			const retention = await updateRetentionPolicy(category, policy);
 			setSnapshot((current) => (current ? { ...current, retention } : current));
-			setMessage(t("settings.retentionSaved"));
+			say("retention", t("settings.retentionSaved"));
 			onSettingsChanged();
 		} catch (error) {
-			setMessage(errorMessage(error, t));
+			say("retention", errorMessage(error, t));
 		}
 	}
 
+	// MicrophoneSettings reports the confirmation or the error in its own section.
 	async function saveMicrophone(deviceId: string | null) {
-		try {
-			const settings = await updateWorkspaceSettings({
-				microphoneDeviceId: deviceId,
-			});
-			setSnapshot((current) => (current ? { ...current, settings } : current));
-			onSettingsChanged();
-		} catch (error) {
-			setMessage(errorMessage(error, t));
-			throw error;
-		}
+		const settings = await updateWorkspaceSettings({
+			microphoneDeviceId: deviceId,
+		});
+		setSnapshot((current) => (current ? { ...current, settings } : current));
+		onSettingsChanged();
 	}
 
 	async function saveShortcut(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
 		const chord = composeShortcut(shortcut);
 		if (!chord) {
-			setMessage(t("settings.invalidShortcut"));
+			say("shortcut", t("settings.invalidShortcut"));
 			return;
 		}
 		if (isReservedShortcut(chord)) {
-			setMessage(t("settings.reservedShortcut", { shortcut: chord }));
+			say("shortcut", t("settings.reservedShortcut", { shortcut: chord }));
+			return;
+		}
+		// The page keeps this chord for the command palette, so dictation would never see it.
+		if (
+			normalizeShortcut(chord) === normalizeShortcut(COMMAND_PALETTE_SHORTCUT)
+		) {
+			say(
+				"shortcut",
+				t("settings.commandPaletteShortcut", { shortcut: chord }),
+			);
 			return;
 		}
 		try {
@@ -353,17 +397,35 @@ export function SettingsPane({
 			});
 			setShortcut(parseShortcut(settings.dictationShortcut));
 			setSnapshot((current) => (current ? { ...current, settings } : current));
-			setMessage(
+			say(
+				"shortcut",
 				t("settings.shortcutSaved", { shortcut: settings.dictationShortcut }),
 			);
 			onSettingsChanged();
 		} catch (error) {
-			setMessage(errorMessage(error, t));
+			say("shortcut", errorMessage(error, t));
 		}
+	}
+
+	// Choosing the language already on the other side swaps the two, like the Dictation pickers.
+	function chooseTranslationSource(language: string) {
+		if (language === translationTargetLanguage)
+			setTranslationTargetLanguage(translationSourceLanguage);
+		setTranslationSourceLanguage(language);
+	}
+
+	function chooseTranslationTarget(language: string) {
+		if (language === translationSourceLanguage)
+			setTranslationSourceLanguage(translationTargetLanguage);
+		setTranslationTargetLanguage(language);
 	}
 
 	async function saveTranslationLanguages(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
+		if (translationSourceLanguage === translationTargetLanguage) {
+			say("translation", t("settings.sameTranslationLanguages"));
+			return;
+		}
 		try {
 			const settings = await updateWorkspaceSettings({
 				translationSourceLanguage,
@@ -372,10 +434,10 @@ export function SettingsPane({
 			setSnapshot((current) => (current ? { ...current, settings } : current));
 			setTranslationSourceLanguage(settings.translationSourceLanguage);
 			setTranslationTargetLanguage(settings.translationTargetLanguage);
-			setMessage(t("settings.translationSaved"));
+			say("translation", t("settings.translationSaved"));
 			onSettingsChanged();
 		} catch (error) {
-			setMessage(errorMessage(error, t));
+			say("translation", errorMessage(error, t));
 		}
 	}
 
@@ -387,10 +449,10 @@ export function SettingsPane({
 			setUiLocaleState(settings.uiLocale);
 			await setUiLocale(settings.uiLocale);
 			// `t` from this render still speaks the old language; confirm in the new one.
-			setMessage(i18n.t("settings.interfaceLanguageSaved"));
+			say("interfaceLanguage", i18n.t("settings.interfaceLanguageSaved"));
 			onSettingsChanged();
 		} catch (error) {
-			setMessage(errorMessage(error, t));
+			say("interfaceLanguage", errorMessage(error, t));
 		}
 	}
 
@@ -402,10 +464,10 @@ export function SettingsPane({
 			});
 			setSnapshot((current) => (current ? { ...current, settings } : current));
 			setAnnounceLiveTranscript(settings.announceLiveTranscript);
-			setMessage(t("settings.accessibilitySaved"));
+			say("accessibility", t("settings.accessibilitySaved"));
 			onSettingsChanged();
 		} catch (error) {
-			setMessage(errorMessage(error, t));
+			say("accessibility", errorMessage(error, t));
 		}
 	}
 
@@ -417,7 +479,8 @@ export function SettingsPane({
 			wordsPerMinute < 1 ||
 			wordsPerMinute > MAX_TYPING_SPEED_WPM
 		) {
-			setMessage(
+			say(
+				"statistics",
 				t("settings.invalidTypingSpeed", { max: MAX_TYPING_SPEED_WPM }),
 			);
 			return;
@@ -428,9 +491,9 @@ export function SettingsPane({
 			});
 			await refresh();
 			onSettingsChanged();
-			setMessage(t("settings.typingSpeedSaved"));
+			say("statistics", t("settings.typingSpeedSaved"));
 		} catch (error) {
-			setMessage(errorMessage(error, t));
+			say("statistics", errorMessage(error, t));
 		}
 	}
 
@@ -448,13 +511,23 @@ export function SettingsPane({
 		const words = wordCount(typingTestText);
 		const seconds = timing ? (timing.lastAt - timing.firstAt) / 1_000 : 0;
 		if (!words || seconds <= 0) {
-			setMessage(t("settings.typingNeedsWords"));
+			say("statistics", t("settings.typingNeedsWords"));
+			return;
+		}
+		if (
+			sentenceWords(typingTestText) !==
+			sentenceWords(t("settings.calibrationText"))
+		) {
+			say("statistics", t("settings.typingMismatch"));
 			return;
 		}
 		const wordsPerMinute = Math.max(1, Math.round((words * 60) / seconds));
 		// Faster than anyone types: the sentence was pasted.
 		if (wordsPerMinute > MAX_TYPING_SPEED_WPM) {
-			setMessage(t("settings.typingTooFast", { max: MAX_TYPING_SPEED_WPM }));
+			say(
+				"statistics",
+				t("settings.typingTooFast", { max: MAX_TYPING_SPEED_WPM }),
+			);
 			return;
 		}
 		try {
@@ -465,9 +538,12 @@ export function SettingsPane({
 			setTypingTestText("");
 			await refresh();
 			onSettingsChanged();
-			setMessage(t("settings.typingMeasuredSaved", { speed: wordsPerMinute }));
+			say(
+				"statistics",
+				t("settings.typingMeasuredSaved", { speed: wordsPerMinute }),
+			);
 		} catch (error) {
-			setMessage(errorMessage(error, t));
+			say("statistics", errorMessage(error, t));
 		}
 	}
 
@@ -478,9 +554,9 @@ export function SettingsPane({
 			await setUiLocale(settings.uiLocale);
 			await refresh();
 			onSettingsChanged();
-			setMessage(i18n.t("settings.resetDone"));
+			say("reset", i18n.t("settings.resetDone"));
 		} catch (error) {
-			setMessage(errorMessage(error, i18n.t.bind(i18n)));
+			say("reset", errorMessage(error, i18n.t.bind(i18n)));
 		}
 		queueMicrotask(() => resetReturnFocus.current?.focus());
 	}
@@ -491,8 +567,14 @@ export function SettingsPane({
 	}
 
 	if (!snapshot) {
-		return <p aria-live="polite">{t("settings.loading")}</p>;
+		return <p aria-live="polite">{notice?.text || t("settings.loading")}</p>;
 	}
+
+	const noticeFor = (section: NoticeSection) => (
+		<p aria-live="polite" className="status">
+			{notice?.section === section ? notice.text : ""}
+		</p>
+	);
 
 	const { settings, stats, storage } = snapshot;
 	return (
@@ -508,6 +590,8 @@ export function SettingsPane({
 					{t("settings.reset")}
 				</button>
 			</header>
+			{noticeFor("page")}
+			{noticeFor("reset")}
 			{confirmingReset ? (
 				<ConfirmDialog
 					body={t("settings.resetConfirm.body")}
@@ -549,6 +633,7 @@ export function SettingsPane({
 					/>
 					<button type="submit">{t("settings.saveCleanup")}</button>
 				</form>
+				{noticeFor("cleanup")}
 			</section>
 
 			<section
@@ -575,6 +660,7 @@ export function SettingsPane({
 					</label>
 					<button type="submit">{t("settings.saveInterfaceLanguage")}</button>
 				</form>
+				{noticeFor("interfaceLanguage")}
 			</section>
 
 			<section
@@ -597,9 +683,12 @@ export function SettingsPane({
 					<p>{t("settings.announceLiveDescription")}</p>
 					<button type="submit">{t("settings.saveAccessibility")}</button>
 				</form>
+				{noticeFor("accessibility")}
 			</section>
 
 			<MicrophoneSettings
+				message={notice?.section === "microphone" ? notice.text : ""}
+				onMessage={(text) => say("microphone", text)}
 				onSave={saveMicrophone}
 				savedDeviceId={settings.microphoneDeviceId}
 			/>
@@ -610,6 +699,7 @@ export function SettingsPane({
 					<ShortcutField onChange={setShortcut} value={shortcut} />
 					<button type="submit">{t("settings.saveShortcut")}</button>
 				</form>
+				{noticeFor("shortcut")}
 			</section>
 
 			<section
@@ -624,9 +714,7 @@ export function SettingsPane({
 						{t("settings.translationSource")}
 						<select
 							id="translation-source-language"
-							onChange={(event) =>
-								setTranslationSourceLanguage(event.target.value)
-							}
+							onChange={(event) => chooseTranslationSource(event.target.value)}
 							value={translationSourceLanguage}
 						>
 							{dictationLanguages.map((language) => (
@@ -640,9 +728,7 @@ export function SettingsPane({
 						{t("settings.translationTarget")}
 						<select
 							id="translation-target-language"
-							onChange={(event) =>
-								setTranslationTargetLanguage(event.target.value)
-							}
+							onChange={(event) => chooseTranslationTarget(event.target.value)}
 							value={translationTargetLanguage}
 						>
 							{dictationLanguages.map((language) => (
@@ -654,6 +740,7 @@ export function SettingsPane({
 					</label>
 					<button type="submit">{t("settings.saveTranslation")}</button>
 				</form>
+				{noticeFor("translation")}
 			</section>
 
 			<section aria-labelledby="retention-title" className="settings-section">
@@ -682,6 +769,7 @@ export function SettingsPane({
 						</select>
 					</label>
 				))}
+				{noticeFor("retention")}
 			</section>
 
 			<section aria-labelledby="statistics-title" className="settings-section">
@@ -751,6 +839,7 @@ export function SettingsPane({
 					</p>
 					<button type="submit">{t("settings.saveTypingSpeed")}</button>
 				</form>
+				{noticeFor("statistics")}
 			</section>
 
 			<section aria-labelledby="storage-title" className="settings-section">
@@ -760,10 +849,6 @@ export function SettingsPane({
 				</p>
 				<a href="/bff/library/export">{t("settings.downloadExport")}</a>
 			</section>
-
-			<p aria-live="polite" className="status">
-				{message}
-			</p>
 		</section>
 	);
 }

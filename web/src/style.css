@@ -903,7 +903,9 @@ button.hold[aria-pressed="true"] {
 }
 
 .command-palette li button {
+	display: grid;
 	width: 100%;
+	gap: 0.25rem;
 	text-align: left;
 }
 
