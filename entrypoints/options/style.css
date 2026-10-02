@@ -179,6 +179,15 @@ li span {
 	overflow-wrap: anywhere;
 }
 
-section > p {
+section > p,
+section > button {
 	margin-top: 12px;
+}
+
+kbd {
+	flex: none;
+	padding: 2px 8px;
+	border: 1px solid var(--border-input);
+	border-radius: 6px;
+	font-family: ui-monospace, monospace;
 }

@@ -66,10 +66,10 @@ export const INPUT_TIMING = {
 export const WEB_LATENCY_TARGET_MS = 1500;
 
 /**
- * How long the web page waits for a fallback transcription upload before it
- * gives up: a base wait plus a share of the recording's length.
+ * How long the web page and the extension wait for a fallback transcription
+ * upload before they give up: a base wait plus a share of the recording's length.
  */
-export const WEB_TRANSCRIPTION_TIMEOUT = {
+export const TRANSCRIPTION_UPLOAD_TIMEOUT = {
 	baseMs: 20_000,
 	perRecordedSecondMs: 250,
 } as const;

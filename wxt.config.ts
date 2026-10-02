@@ -30,10 +30,11 @@ export default defineConfig({
 				},
 				description: "Start/stop recording",
 			},
+			// Chrome keeps Alt+Shift+T for its toolbar and never assigns it to an extension.
 			"toggle-translation": {
 				suggested_key: {
-					default: "Alt+Shift+T",
-					mac: "Alt+Shift+T",
+					default: "Alt+V",
+					mac: "Alt+V",
 				},
 				description: "Start or stop translation dictation",
 			},

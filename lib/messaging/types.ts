@@ -41,12 +41,20 @@ export type DeliveryAvailability = {
 	type: "delivery-availability";
 	available: boolean;
 	reason?:
+		| "browser-page"
 		| "diduny-web-app"
 		| "no-text-field"
 		| "permission-denied"
 		| "site-disabled"
 		| "target-unavailable"
 		| "unsupported-editor";
+};
+/** A start found no Diduny session; the panel goes back to its sign-in view. */
+export type SessionEnded = { type: "session-ended" };
+/** The Microphone Access tab is open and the start waits for the user there. */
+export type MicrophonePermission = {
+	type: "microphone-permission";
+	status: "waiting";
 };
 
 // Background → Offscreen
@@ -97,6 +105,8 @@ export type Message =
 	| RealtimeTokens
 	| TranscriptionComplete
 	| DeliveryAvailability
+	| SessionEnded
+	| MicrophonePermission
 	| StartCapture
 	| StopCapture
 	| CaptureReady

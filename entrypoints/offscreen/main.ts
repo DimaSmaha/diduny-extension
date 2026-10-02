@@ -2,6 +2,7 @@ import {
 	extensionTranscriptionConfig,
 	transcribeAudio,
 	transcriptSegments,
+	transcriptionUploadTimeoutMs,
 } from "../../lib/api/transcription";
 import {
 	recoverPartialCapture,
@@ -120,10 +121,20 @@ onMessage(async (msg) => {
 		await startCapture(msg);
 	} else if (msg.type === "stop-capture") {
 		await stopCapture();
-	} else if (msg.type === "forceClose") {
-		await discardCapture();
 	}
 });
+
+// Logout waits for this answer before it closes the offscreen document.
+chrome.runtime.onMessage.addListener(
+	(message: unknown, _sender, sendResponse) => {
+		if ((message as { type?: unknown } | null)?.type !== "forceClose")
+			return false;
+		discardCapture()
+			.catch((error) => logError("offscreen:discard", error))
+			.finally(() => sendResponse({ ok: true }));
+		return true;
+	},
+);
 
 console.log("[offscreen] loaded");
 
@@ -359,6 +370,11 @@ async function stopCapture(partiallyRecovered = false) {
 							translation: pipeline.translation,
 						},
 						pipeline.bffOrigin,
+						{
+							timeoutMs: transcriptionUploadTimeoutMs(
+								recording.durationSeconds,
+							),
+						},
 					);
 					text = result.text;
 					segments = transcriptSegments(result.tokens);

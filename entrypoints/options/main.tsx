@@ -46,6 +46,27 @@ function Options() {
 	const [microphones, setMicrophones] = useState<MediaDeviceInfo[]>([]);
 	const [site, setSite] = useState("");
 	const [disabledSites, setDisabledSites] = useState<string[]>([]);
+	const [shortcuts, setShortcuts] = useState<chrome.commands.Command[]>([]);
+
+	// Chrome may leave a suggested key unassigned, and the user changes keys on
+	// chrome://extensions/shortcuts; read them again when this page is back in view.
+	useEffect(() => {
+		const loadShortcuts = () => {
+			chrome.commands
+				.getAll()
+				.then((commands) =>
+					setShortcuts(
+						commands.filter(
+							(command) => command.name && command.name !== "_execute_action",
+						),
+					),
+				)
+				.catch(() => setShortcuts([]));
+		};
+		loadShortcuts();
+		window.addEventListener("focus", loadShortcuts);
+		return () => window.removeEventListener("focus", loadShortcuts);
+	}, []);
 
 	useEffect(() => {
 		getBffOrigin()
@@ -68,6 +89,15 @@ function Options() {
 
 	const report = (section: Section, text: string, error = false) =>
 		setMessage({ error, section, text });
+
+	// A message is about the value that was saved; once the field changes it no longer applies.
+	const clearReport = (section: Section) =>
+		setMessage((current) => (current?.section === section ? null : current));
+
+	// The browser's own URL check blocks the submit, so show its reason here too.
+	const reportInvalid =
+		(section: Section) => (event: FormEvent<HTMLInputElement>) =>
+			report(section, event.currentTarget.validationMessage, true);
 
 	const submit = async (event: FormEvent) => {
 		event.preventDefault();
@@ -134,7 +164,11 @@ function Options() {
 						id="bff-origin"
 						type="url"
 						value={origin}
-						onChange={(event) => setOrigin(event.target.value)}
+						onChange={(event) => {
+							setOrigin(event.target.value);
+							clearReport("connection");
+						}}
+						onInvalid={reportInvalid("connection")}
 						required
 					/>
 					<p id="bff-origin-hint">Use localhost, with any local port.</p>
@@ -174,7 +208,11 @@ function Options() {
 						id="delivery-site"
 						type="url"
 						value={site}
-						onChange={(event) => setSite(event.target.value)}
+						onChange={(event) => {
+							setSite(event.target.value);
+							clearReport("sites");
+						}}
+						onInvalid={reportInvalid("sites")}
 						placeholder="https://example.com"
 						required
 					/>
@@ -187,6 +225,7 @@ function Options() {
 							<li key={siteOrigin}>
 								<span>{siteOrigin}</span>
 								<button
+									aria-label={`Enable ${siteOrigin}`}
 									type="button"
 									onClick={() => void enableSite(siteOrigin)}
 								>
@@ -198,6 +237,30 @@ function Options() {
 				) : (
 					<p>Direct delivery is enabled on every site you allow.</p>
 				)}
+			</section>
+
+			<section>
+				<h2>Keyboard shortcuts</h2>
+				<ul aria-label="Keyboard shortcuts">
+					{shortcuts.map((command) => (
+						<li key={command.name}>
+							<span>{command.description || command.name}</span>
+							<kbd>{command.shortcut || "Not set"}</kbd>
+						</li>
+					))}
+				</ul>
+				<p>
+					Chrome sets these keys. Change them, or set a missing one, on Chrome's
+					shortcuts page.
+				</p>
+				<button
+					type="button"
+					onClick={() =>
+						void chrome.tabs.create({ url: "chrome://extensions/shortcuts" })
+					}
+				>
+					Change shortcuts
+				</button>
 			</section>
 		</main>
 	);

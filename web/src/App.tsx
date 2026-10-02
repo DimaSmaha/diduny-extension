@@ -16,8 +16,8 @@ import {
 } from "../../src/core/auth-validation";
 import {
 	AUDIO_FORMAT,
+	TRANSCRIPTION_UPLOAD_TIMEOUT,
 	WEB_LATENCY_TARGET_MS,
-	WEB_TRANSCRIPTION_TIMEOUT,
 } from "../../src/core/constants";
 import type { RealtimeToken } from "../../src/core/realtime-session";
 import { DEFAULT_SETTINGS } from "../../src/core/settings";
@@ -696,9 +696,9 @@ export function App() {
 				setUploading(true);
 				const timeout = window.setTimeout(
 					() => activeUpload.abort("timeout"),
-					WEB_TRANSCRIPTION_TIMEOUT.baseMs +
+					TRANSCRIPTION_UPLOAD_TIMEOUT.baseMs +
 						recording.durationSeconds *
-							WEB_TRANSCRIPTION_TIMEOUT.perRecordedSecondMs,
+							TRANSCRIPTION_UPLOAD_TIMEOUT.perRecordedSecondMs,
 				);
 				try {
 					const result = await bffJson<TranscriptionResponse>(

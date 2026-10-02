@@ -2,14 +2,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { onMessage } from "../../../lib/messaging/bridge";
 import { appendTranscript } from "../../../web/src/dictation";
 
-const STORAGE_KEY = "diduny_transcripts";
+/**
+ * The panel's Transcript, typed edits included, kept while the browser runs so
+ * closing the side panel does not lose it. Logout removes it.
+ */
+const DRAFT_STORAGE_KEY = "didunyPanelTranscript";
 const stripTags = (s: string) => s.replace(/<\/?(?:end|fin|eos)>/gi, "");
 
-interface SavedTranscript {
-	text: string;
-	tabText?: string;
-	micText?: string;
-	timestamp: number;
+interface TranscriptDraft {
+	micText: string;
+	tabText: string;
 }
 
 export interface SourceState {
@@ -32,22 +34,61 @@ const withoutLive = (prev: SourceState): SourceState => ({
 	liveProvisional: "",
 });
 
+function draftText(value: unknown, key: keyof TranscriptDraft) {
+	const text =
+		value && typeof value === "object"
+			? (value as Partial<TranscriptDraft>)[key]
+			: undefined;
+	return typeof text === "string" ? text : "";
+}
+
 export function useTranscript() {
 	const [mic, setMic] = useState<SourceState>(EMPTY_SOURCE);
 	const [tab, setTab] = useState<SourceState>(EMPTY_SOURCE);
 	const [copied, setCopied] = useState(false);
-	const [history, setHistory] = useState<SavedTranscript[]>([]);
-	const micRef = useRef(mic);
-	const tabRef = useRef(tab);
-	micRef.current = mic;
-	tabRef.current = tab;
+	/** Counts finished results, so the views can scroll to the newest one. */
+	const [resultCount, setResultCount] = useState(0);
+	const draftLoaded = useRef(false);
 
 	useEffect(() => {
-		chrome.storage.local.get(STORAGE_KEY).then((result) => {
-			const saved = result[STORAGE_KEY] as SavedTranscript[] | undefined;
-			if (saved) setHistory(saved);
-		});
+		chrome.storage.session
+			.get(DRAFT_STORAGE_KEY)
+			.then((stored) => {
+				const draft = stored[DRAFT_STORAGE_KEY];
+				// A result that arrived while the draft loaded is kept after it.
+				setMic((prev) => ({
+					...prev,
+					finalText: appendTranscript(
+						draftText(draft, "micText"),
+						prev.finalText,
+					),
+				}));
+				setTab((prev) => ({
+					...prev,
+					finalText: appendTranscript(
+						draftText(draft, "tabText"),
+						prev.finalText,
+					),
+				}));
+			})
+			.catch(() => {})
+			.finally(() => {
+				draftLoaded.current = true;
+			});
 	}, []);
+
+	useEffect(() => {
+		if (!draftLoaded.current) return;
+		const draft: TranscriptDraft = {
+			micText: mic.finalText,
+			tabText: tab.finalText,
+		};
+		const saved =
+			draft.micText || draft.tabText
+				? chrome.storage.session.set({ [DRAFT_STORAGE_KEY]: draft })
+				: chrome.storage.session.remove(DRAFT_STORAGE_KEY);
+		saved.catch(() => {});
+	}, [mic.finalText, tab.finalText]);
 
 	useEffect(() => {
 		return onMessage((msg) => {
@@ -87,28 +128,7 @@ export function useTranscript() {
 					liveFinal: "",
 					liveProvisional: "",
 				}));
-			}
-
-			if (msg.type === "recording-state-changed" && msg.state === "success") {
-				// Save to history when recording completes
-				const micState = micRef.current;
-				const tabState = tabRef.current;
-				const combined = [tabState.finalText, micState.finalText]
-					.filter(Boolean)
-					.join("\n\n");
-				if (combined) {
-					const entry: SavedTranscript = {
-						text: combined,
-						tabText: tabState.finalText || undefined,
-						micText: micState.finalText || undefined,
-						timestamp: Date.now(),
-					};
-					setHistory((prev) => {
-						const updated = [entry, ...prev].slice(0, 50);
-						chrome.storage.local.set({ [STORAGE_KEY]: updated });
-						return updated;
-					});
-				}
+				setResultCount((count) => count + 1);
 			}
 		});
 	}, []);
@@ -133,6 +153,13 @@ export function useTranscript() {
 		setMic((prev) => ({ ...prev, finalText }));
 	}, []);
 
+	/** Logout: nothing from this session stays in the panel or in storage. */
+	const reset = useCallback(() => {
+		setMic(EMPTY_SOURCE);
+		setTab(EMPTY_SOURCE);
+		chrome.storage.session.remove(DRAFT_STORAGE_KEY).catch(() => {});
+	}, []);
+
 	return {
 		mic,
 		tab,
@@ -141,6 +168,7 @@ export function useTranscript() {
 		copyToClipboard,
 		clear,
 		editMic,
-		history,
+		reset,
+		resultCount,
 	};
 }

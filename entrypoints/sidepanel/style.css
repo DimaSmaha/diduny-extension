@@ -266,8 +266,14 @@ body {
 	transition: all 0.15s;
 }
 
-.record-btn:hover {
+.record-btn:hover:not(:disabled) {
 	background: var(--danger-bg);
+}
+
+/* While starting or processing the button does nothing, so it must not look ready. */
+.record-btn:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
 }
 
 .record-btn .dot {
@@ -319,6 +325,7 @@ body {
 }
 
 .record-hint {
+	display: block;
 	margin-top: -8px;
 	text-align: center;
 	font-size: 12px;
@@ -388,9 +395,10 @@ body {
 	word-break: break-word;
 }
 
+/* It grows into free space but shrinks to keep a notice and the live box in view at docked size. */
 textarea.transcript-text {
 	width: 100%;
-	min-height: 160px;
+	min-height: 96px;
 	color: var(--text);
 	font-family: inherit;
 	resize: vertical;
@@ -478,6 +486,7 @@ textarea.transcript-text:focus-visible {
 }
 
 .error-msg {
+	display: block;
 	padding: 8px 12px;
 	background: var(--danger-bg);
 	border: 1px solid var(--danger-border);

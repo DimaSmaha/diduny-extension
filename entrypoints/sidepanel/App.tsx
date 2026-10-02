@@ -55,8 +55,12 @@ export function App() {
 					recording.setTranslationTargetLanguage
 				}
 				onDiarizationChange={recording.setDiarization}
-				onLogout={auth.logout}
+				onLogout={() => {
+					transcript.reset();
+					void auth.logout();
+				}}
 				error={recording.error}
+				waitingForMicrophone={recording.waitingForMicrophone}
 			/>
 			{recording.mode === "meeting" ? (
 				<MeetingTranscriptView
@@ -64,6 +68,7 @@ export function App() {
 					micText={transcript.mic.finalText}
 					live={liveText(transcript.tab)}
 					copied={transcript.copied}
+					resultCount={transcript.resultCount}
 					onCopy={transcript.copyToClipboard}
 					onClear={transcript.clear}
 				/>
@@ -73,6 +78,7 @@ export function App() {
 					live={liveText(transcript.mic)}
 					copied={transcript.copied}
 					deliveryNotice={recording.deliveryNotice}
+					resultCount={transcript.resultCount}
 					onCopy={transcript.copyToClipboard}
 					onClear={transcript.clear}
 					onEdit={transcript.editMic}

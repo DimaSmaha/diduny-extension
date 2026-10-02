@@ -20,6 +20,7 @@ interface Props {
 	onDiarizationChange: (val: boolean) => void;
 	onLogout: () => void;
 	error: string | null;
+	waitingForMicrophone: boolean;
 }
 
 const stateLabels: Record<RecordingState, string> = {
@@ -45,6 +46,7 @@ export function RecordingControls({
 	onDiarizationChange,
 	onLogout,
 	error,
+	waitingForMicrophone,
 }: Props) {
 	const isRecording = state === "recording";
 	const isStarting = state === "starting";
@@ -124,6 +126,7 @@ export function RecordingControls({
 			<div className="mode-toggle">
 				<button
 					type="button"
+					aria-pressed={mode === "translation"}
 					className={mode === "translation" ? "active" : ""}
 					onClick={() => onModeChange("translation")}
 					disabled={isRecording || isStarting || isProcessing}
@@ -132,6 +135,7 @@ export function RecordingControls({
 				</button>
 				<button
 					type="button"
+					aria-pressed={mode === "voice"}
 					className={mode === "voice" ? "active" : ""}
 					onClick={() => onModeChange("voice")}
 					disabled={isRecording || isStarting || isProcessing}
@@ -140,6 +144,7 @@ export function RecordingControls({
 				</button>
 				<button
 					type="button"
+					aria-pressed={mode === "meeting"}
 					className={mode === "meeting" ? "active" : ""}
 					onClick={() => onModeChange("meeting")}
 					disabled={isRecording || isStarting || isProcessing}
@@ -150,6 +155,7 @@ export function RecordingControls({
 
 			<div className="settings-row">
 				<select
+					aria-label="Spoken language"
 					value={language}
 					onChange={(e) => onLanguageChange(e.target.value)}
 					disabled={isRecording || isStarting || isProcessing}
@@ -210,6 +216,12 @@ export function RecordingControls({
 				<div className="record-hint">
 					{isRecording ? "Click again to stop" : "Click to start"}
 				</div>
+			)}
+			{isStarting && waitingForMicrophone && (
+				<output className="record-hint">
+					Allow microphone access in the Diduny tab that opened, then come back
+					here.
+				</output>
 			)}
 
 			{error && <div className="error-msg">{error}</div>}

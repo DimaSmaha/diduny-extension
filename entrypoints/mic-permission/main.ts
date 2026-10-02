@@ -3,6 +3,7 @@ import {
 	applyStoredTheme,
 	currentTheme,
 	saveStoredTheme,
+	watchStoredTheme,
 } from "../../lib/theme-storage";
 import { applyThemePreference, nextTheme } from "../../web/src/theme";
 
@@ -26,6 +27,7 @@ function renderThemeToggle() {
 }
 
 void applyStoredTheme().then(renderThemeToggle);
+watchStoredTheme(renderThemeToggle);
 themeBtn.addEventListener("click", () => {
 	const next = nextTheme(currentTheme());
 	applyThemePreference(next);

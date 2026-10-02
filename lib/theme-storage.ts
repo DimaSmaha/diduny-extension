@@ -27,6 +27,25 @@ export async function saveStoredTheme(theme: ResolvedTheme) {
 	}
 }
 
+/**
+ * Applies a theme saved by another extension page while this one stays open.
+ * Returns a function that stops watching.
+ */
+export function watchStoredTheme(onChange: (theme: ResolvedTheme) => void) {
+	const listener = (
+		changes: Record<string, chrome.storage.StorageChange>,
+		areaName: string,
+	) => {
+		if (areaName !== "local" || !(THEME_STORAGE_KEY in changes)) return;
+		applyThemePreference(
+			parseThemePreference(changes[THEME_STORAGE_KEY]?.newValue),
+		);
+		onChange(currentTheme());
+	};
+	chrome.storage.onChanged.addListener(listener);
+	return () => chrome.storage.onChanged.removeListener(listener);
+}
+
 /** Call before first render so the page never paints in the wrong theme. */
 export async function applyStoredTheme() {
 	applyThemePreference(await readStoredTheme());
