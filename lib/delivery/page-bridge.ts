@@ -307,8 +307,13 @@ export function installDeliveryBridge(): DeliveryPreparation {
 		if (!target || !target.isConnected) {
 			return { inserted: false, reason: "target-unavailable" };
 		}
-		if (!isTextControl(target))
+		if (!isTextControl(target)) {
+			// A field that turned disabled or read-only since Start is no longer
+			// one to type into; the contenteditable path would claim success.
+			if (target.tagName === "TEXTAREA" || target.tagName === "INPUT")
+				return { inserted: false, reason: "target-unavailable" };
 			return insertContentEditable(target, text, currentState.range);
+		}
 
 		const value = target.value;
 		// A field keeps its selection while unfocused, so text typed during the

@@ -26,6 +26,8 @@ export type RecordingStateChanged = {
 	type: "recording-state-changed";
 	state: RecordingState;
 	error?: string;
+	/** What is recording; a shortcut can start a mode the panel is not showing. */
+	mode?: RecordingMode;
 };
 export type RealtimeTokens = {
 	type: "realtime-tokens";

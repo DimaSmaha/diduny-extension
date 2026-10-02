@@ -1,4 +1,5 @@
 import { TRANSCRIPTION_UPLOAD_TIMEOUT } from "../../src/core/constants";
+import { isDidunyError } from "../../src/core/errors";
 import type { TranscriptSegment } from "../../src/core/models";
 import { buildTranscriptionConfig } from "../../src/core/transcription-config";
 import { errorFromResponse, userErrorMessage } from "../../web/src/errors";
@@ -29,6 +30,12 @@ function english(key: string, values: Record<string, unknown> = {}) {
 
 export function transcriptionFailureMessage(status: number, body: unknown) {
 	return userErrorMessage(errorFromResponse(status, body), english);
+}
+
+/** Any failure in words for the panel: Diduny's own errors carry a code, not a sentence. */
+export function failureMessage(error: unknown, fallback: string) {
+	if (isDidunyError(error)) return userErrorMessage(error, english);
+	return error instanceof Error && error.message ? error.message : fallback;
 }
 
 /** Without a limit an upload that never answers leaves the panel on Processing forever. */

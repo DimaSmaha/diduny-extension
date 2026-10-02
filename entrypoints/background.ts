@@ -85,8 +85,16 @@ export default defineBackground(() => {
 		chrome.alarms.clear(KEEPALIVE_ALARM);
 	}
 
-	// Side panel opens on action click
-	chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+	// The toolbar button opens the side panel. Chrome grants activeTab, which
+	// tab capture needs, only when the extension handles the click itself; with
+	// openPanelOnActionClick the panel opened but Meeting could never record.
+	chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
+	chrome.action.onClicked.addListener((tab) => {
+		// Called straight from the click, as sidePanel.open needs a user gesture.
+		chrome.sidePanel.open({ windowId: tab.windowId }).catch((error) => {
+			logError("bg:openSidePanel", error);
+		});
+	});
 
 	// Log uncaught errors in service worker
 	self.addEventListener("error", (event) => {
@@ -679,7 +687,12 @@ export default defineBackground(() => {
 
 	async function setState(state: RecordingState, error?: string) {
 		currentState = state;
-		await sendMessage({ type: "recording-state-changed", state, error });
+		await sendMessage({
+			type: "recording-state-changed",
+			state,
+			error,
+			mode: currentMode,
+		});
 		updateBadge(state);
 	}
 

@@ -99,6 +99,17 @@ export function useRecording() {
 					`${state} → ${msg.state}${msg.error ? ` (${msg.error})` : ""}`,
 				);
 				setState(msg.state);
+				// A shortcut can start a meeting while the panel shows Voice; show what is recording.
+				const runningMode = msg.mode;
+				if (
+					runningMode &&
+					(msg.state === "starting" || msg.state === "recording")
+				)
+					setPreferences((previous) =>
+						previous.mode === runningMode
+							? previous
+							: { ...previous, mode: runningMode },
+					);
 				if (msg.state !== "starting") setWaitingForMicrophone(false);
 				if (msg.error) setError(msg.error);
 				if (msg.state === "idle" || msg.state === "success") {

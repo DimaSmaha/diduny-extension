@@ -1,5 +1,6 @@
 import {
 	extensionTranscriptionConfig,
+	failureMessage,
 	transcribeAudio,
 	transcriptSegments,
 	transcriptionUploadTimeoutMs,
@@ -414,10 +415,10 @@ async function stopCapture(partiallyRecovered = false) {
 				await pipeline.scratch.discard();
 			} catch (cause) {
 				logError("offscreen:library", cause);
-				error =
-					cause instanceof Error
-						? cause
-						: new Error("Could not save the recording to the library");
+				// A failed transcription explains more than the save that failed after it.
+				error ??= new Error(
+					failureMessage(cause, "Could not save the recording to the library"),
+				);
 			}
 			if (transcribed) {
 				await sendMessage({

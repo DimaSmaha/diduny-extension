@@ -1,7 +1,9 @@
 import { afterEach, expect, test } from "bun:test";
+import { DidunyError } from "../../src/core/errors";
 import {
 	TRANSCRIPTION_TIMED_OUT_MESSAGE,
 	extensionTranscriptionConfig,
+	failureMessage,
 	transcribeAudio,
 	transcriptSegments,
 	transcriptionFailureMessage,
@@ -25,6 +27,16 @@ test("explains upstream failures in the web app's wording instead of a bare stat
 	expect(transcriptionFailureMessage(500, { error: "upstream_failed" })).toBe(
 		"The Diduny service rejected this request. Try again; if it continues, restart the local Diduny service.",
 	);
+});
+
+test("explains Diduny's own error codes instead of showing them", () => {
+	expect(
+		failureMessage(new DidunyError("authentication_failed"), "fallback"),
+	).toBe("Your Diduny sign-in has expired. Sign in again, then retry.");
+	expect(failureMessage(new Error("Plain words"), "fallback")).toBe(
+		"Plain words",
+	);
+	expect(failureMessage("not an error", "fallback")).toBe("fallback");
 });
 
 test("stops an upload that never answers once its time limit passes", async () => {
